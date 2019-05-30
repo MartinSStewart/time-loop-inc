@@ -88,7 +88,7 @@ view model =
             , Html.Attributes.style "font-size" "50px"
             , Html.Attributes.style "font-family" "courier"
             ]
-            [ text <| AsciiRender.view getLevel tempTimeState ]
+            [ text <| AsciiRender.view getLevel tempTimeState 0 ]
         ]
 
 

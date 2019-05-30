@@ -9,8 +9,8 @@ import Point
 import Set
 
 
-view : Level -> TimeState -> String
-view level timeState =
+view : Level -> TimeState -> Int -> String
+view level timeState time =
     let
         ( width, height ) =
             level.levelSize
@@ -82,28 +82,35 @@ view level timeState =
                                         ( 0, 1 )
 
                             ( entranceChar, exitChar ) =
-                                (case index of
-                                    0 ->
-                                        ( portal0Entrance, portal0Exit )
-
-                                    1 ->
-                                        ( portal1Entrance, portal1Exit )
-
-                                    _ ->
-                                        ( portalInvalid, portalInvalid )
-                                )
-                                    |> Tuple.mapBoth
-                                        (getPortalChar portalPair.firstPortal)
-                                        (getPortalChar portalPair.secondPortal)
+                                getPortalPairChar portalPair index
                         in
                         grid
                             |> Array2D.set y0 x0 entranceChar
                             |> Array2D.set y1 x1 exitChar
                     )
                     scaledGrid
+
+        portalInfoLines =
+            level.portalPairs
+                |> List.indexedMap
+                    (\index portalPair ->
+                        let
+                            ( entranceChar, exitChar ) =
+                                getPortalPairChar portalPair index
+                        in
+                        String.fromChar entranceChar
+                            ++ " -> "
+                            ++ String.fromChar exitChar
+                            ++ ": "
+                            ++ String.fromInt portalPair.timeDelta
+                            ++ "\n"
+                    )
+                |> String.concat
     in
     gridWithPortals
         |> getText
+        |> flip (++) ("\nTime: " ++ String.fromInt time ++ "\n")
+        |> flip (++) portalInfoLines
 
 
 getText : Array2D Char -> String
@@ -133,6 +140,22 @@ getPortalChar portal chars =
 
         BottomEdge ->
             chars.down
+
+
+getPortalPairChar portalPair index =
+    (case index of
+        0 ->
+            ( portal0Entrance, portal0Exit )
+
+        1 ->
+            ( portal1Entrance, portal1Exit )
+
+        _ ->
+            ( portalInvalid, portalInvalid )
+    )
+        |> Tuple.mapBoth
+            (getPortalChar portalPair.firstPortal)
+            (getPortalChar portalPair.secondPortal)
 
 
 portal0Entrance =
