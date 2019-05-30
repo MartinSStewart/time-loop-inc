@@ -4,19 +4,19 @@ import Array exposing (Array)
 import Array2D exposing (Array2D)
 import Basics.Extra exposing (flip)
 import Level exposing (Level, TileEdge(..))
-import LevelState exposing (TimeState)
+import LevelState exposing (LevelInstant)
 import Point
 import Set
 
 
-view : Level -> TimeState -> Int -> String
+view : Level -> LevelInstant -> Int -> String
 view level timeState time =
     let
         ( width, height ) =
             level.levelSize
 
         ( playerX, playerY ) =
-            timeState.playerPrime
+            Tuple.first timeState.playerPrime
 
         ( exitX, exitY ) =
             level.exit
@@ -32,7 +32,9 @@ view level timeState time =
             List.foldl (\( x, y ) grid -> Array2D.set y x '□' grid) gridWithWalls timeState.boxes
 
         gridWithPlayers =
-            List.foldl (\( x, y ) grid -> Array2D.set y x 'p' grid) gridWithBoxes timeState.players
+            timeState.players
+                |> List.map Tuple.first
+                |> List.foldl (\( x, y ) grid -> Array2D.set y x 'p' grid) gridWithBoxes
 
         gridWithPlayerPrime =
             Array2D.set playerY playerX 'P' gridWithPlayers
@@ -98,7 +100,8 @@ view level timeState time =
                             ( entranceChar, exitChar ) =
                                 getPortalPairChar portalPair index
                         in
-                        String.fromChar entranceChar
+                        "\n"
+                            ++ String.fromChar entranceChar
                             ++ " -> "
                             ++ String.fromChar exitChar
                             ++ ": "

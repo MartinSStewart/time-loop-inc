@@ -5,12 +5,17 @@ import Array2D exposing (Array2D)
 import AsciiRender
 import Basics.Extra exposing (flip)
 import Browser
+import Browser.Events
 import Html exposing (Html, div, h1, img, text)
 import Html.Attributes exposing (src)
+import Keyboard exposing (Key)
 import Level exposing (Level, TileEdge(..))
-import LevelState exposing (LevelState, PlayerAction, TimeState)
+import LevelState exposing (LevelState, MoveAction(..))
+import List.Extra as List
+import Maybe.Extra as Maybe
 import Point exposing (Point)
 import Set exposing (Set)
+import Time exposing (Posix)
 
 
 
@@ -18,9 +23,9 @@ import Set exposing (Set)
 
 
 type alias Model =
-    { playerActions : List PlayerAction
+    { playerActions : List MoveAction
     , currentTime : Int
-    , levelState : LevelState
+    , keys : List Key
     }
 
 
@@ -36,10 +41,6 @@ getLevel =
           , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
           , timeDelta = 2
           }
-        , { firstPortal = { position = ( 0, 4 ), tileEdge = TopEdge }
-          , secondPortal = { position = ( 4, 4 ), tileEdge = BottomEdge }
-          , timeDelta = 2
-          }
         ]
     }
 
@@ -48,7 +49,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { playerActions = []
       , currentTime = 0
-      , levelState = LevelState.init getLevel
+      , keys = []
       }
     , Cmd.none
     )
@@ -60,11 +61,68 @@ init =
 
 type Msg
     = NoOp
+    | KeyMsg Keyboard.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        NoOp ->
+            model |> addCmdNone
+
+        KeyMsg keyMsg ->
+            let
+                newKeys =
+                    Keyboard.update keyMsg model.keys
+
+                keyDown key =
+                    List.any ((==) key) newKeys
+
+                keyPressed key =
+                    keyDown key && (List.any ((==) key) model.keys |> not)
+
+                model_ =
+                    case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
+                        ( True, True ) ->
+                            { model
+                                | playerActions =
+                                    model.playerActions |> List.reverse |> List.drop 1 |> List.reverse
+                            }
+
+                        _ ->
+                            model
+
+                action =
+                    if keyPressed Keyboard.ArrowLeft then
+                        Just MoveLeft
+
+                    else if keyPressed Keyboard.ArrowRight then
+                        Just MoveRight
+
+                    else if keyPressed Keyboard.ArrowUp then
+                        Just MoveUp
+
+                    else if keyPressed Keyboard.ArrowDown then
+                        Just MoveDown
+
+                    else if keyPressed Keyboard.Spacebar then
+                        Just MoveNone
+
+                    else
+                        Nothing
+            in
+            { model_ | keys = newKeys, playerActions = model_.playerActions ++ Maybe.toList action }
+                |> addCmdNone
+
+
+addCmdNone : a -> ( a, Cmd msg )
+addCmdNone a =
+    ( a, Cmd.none )
+
+
+addCmd : Cmd msg -> a -> ( a, Cmd msg )
+addCmd cmd a =
+    ( a, cmd )
 
 
 
@@ -72,9 +130,9 @@ update msg model =
 
 
 tempTimeState =
-    { playerPrime = ( 1, 1 )
-    , players = [ ( 1, 2 ) ]
-    , boxes = [ ( 2, 2 ) ]
+    { playerPrime = ( ( 1, 1 ), [] )
+    , players = []
+    , boxes = []
     }
 
 
@@ -92,6 +150,13 @@ view model =
         ]
 
 
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ Sub.map KeyMsg Keyboard.subscriptions
+        ]
+
+
 
 ---- PROGRAM ----
 
@@ -102,5 +167,5 @@ main =
         { view = view
         , init = \_ -> init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         }
