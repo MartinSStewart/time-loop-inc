@@ -1,8 +1,8 @@
-module LevelState exposing (BoxStart, CurrentTimeState, LevelState, PlayerAction(..), PlayerStart, init)
+module LevelState exposing (BoxStart, LevelState, PlayerAction(..), PlayerStart, TimeState, init)
 
 import Level exposing (Level)
 import Point exposing (Point)
-import Set
+import Set exposing (Set)
 
 
 init : Level -> LevelState
@@ -23,8 +23,11 @@ type alias LevelState =
     }
 
 
-type alias CurrentTimeState =
-    {}
+type alias TimeState =
+    { playerPrime : Point
+    , players : List Point
+    , boxes : List Point
+    }
 
 
 type alias BoxStart =
@@ -46,3 +49,8 @@ type PlayerAction
     | MoveRight
     | MoveDown
     | MoveNone
+
+
+
+--step : LevelState -> TimeState -> TimeState
+--step levelState currentTimeState =

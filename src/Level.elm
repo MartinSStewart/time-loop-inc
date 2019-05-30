@@ -1,4 +1,4 @@
-module Level exposing (Level, Portal, PortalPair, TileEdge)
+module Level exposing (Level, Portal, PortalPair, TileEdge(..))
 
 import Point exposing (Point)
 import Set exposing (Set)
