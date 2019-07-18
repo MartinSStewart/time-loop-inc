@@ -1,4 +1,4 @@
-module AsciiRender exposing (getRows, getText, portal0Entrance, portal1Entrance, view)
+module AsciiRender exposing (getRows, getText, view)
 
 import Array exposing (Array)
 import Array2D exposing (Array2D)
@@ -26,7 +26,7 @@ view level timeState time =
                 |> Array2D.set exitY exitX 'E'
 
         gridWithWalls =
-            List.foldl (\( x, y ) grid -> Array2D.set y x '■' grid) emptyGrid (Set.toList level.walls)
+            List.foldl (\( x, y ) grid -> Array2D.set y x '█' grid) emptyGrid (Set.toList level.walls)
 
         gridWithBoxes =
             List.foldl (\( x, y ) grid -> Array2D.set y x '□' grid) gridWithWalls timeState.boxes
@@ -41,14 +41,39 @@ view level timeState time =
 
         scaledGrid =
             Array2D.initialize
-                (height * 2 + 1)
-                (width * 2 + 1)
+                (height * 3)
+                (width * 3)
                 (\row col ->
-                    if modBy 2 row == 1 && modBy 2 col == 1 then
-                        Array2D.get (row // 2) (col // 2) gridWithPlayerPrime |> Maybe.withDefault '.'
+                    case ( modBy 3 row, modBy 3 col ) of
+                        ( 0, 0 ) ->
+                            '┌'
 
-                    else
-                        '.'
+                        ( 0, 1 ) ->
+                            '─'
+
+                        ( 0, 2 ) ->
+                            '┐'
+
+                        ( 1, 0 ) ->
+                            '│'
+
+                        ( 1, 1 ) ->
+                            Array2D.get (row // 3) (col // 3) gridWithPlayerPrime |> Maybe.withDefault '.'
+
+                        ( 1, 2 ) ->
+                            '│'
+
+                        ( 2, 0 ) ->
+                            '└'
+
+                        ( 2, 1 ) ->
+                            '─'
+
+                        ( 2, 2 ) ->
+                            '┘'
+
+                        _ ->
+                            '?'
                 )
 
         gridWithPortals =
@@ -59,13 +84,13 @@ view level timeState time =
                         let
                             ( x0, y0 ) =
                                 portalPair.firstPortal.position
-                                    |> Point.scale 2
+                                    |> Point.scale 3
                                     |> Point.add ( 1, 1 )
                                     |> Point.add (offset portalPair.firstPortal)
 
                             ( x1, y1 ) =
                                 portalPair.secondPortal.position
-                                    |> Point.scale 2
+                                    |> Point.scale 3
                                     |> Point.add ( 1, 1 )
                                     |> Point.add (offset portalPair.secondPortal)
 
@@ -83,12 +108,12 @@ view level timeState time =
                                     BottomEdge ->
                                         ( 0, 1 )
 
-                            ( entranceChar, exitChar ) =
-                                getPortalPairChar portalPair index
+                            ( entrance, exit ) =
+                                getPortalChar index
                         in
                         grid
-                            |> Array2D.set y0 x0 entranceChar
-                            |> Array2D.set y1 x1 exitChar
+                            |> Array2D.set y0 x0 entrance
+                            |> Array2D.set y1 x1 exit
                     )
                     scaledGrid
 
@@ -97,13 +122,13 @@ view level timeState time =
                 |> List.indexedMap
                     (\index portalPair ->
                         let
-                            ( entranceChar, exitChar ) =
-                                getPortalPairChar portalPair index
+                            ( entrance, exit ) =
+                                getPortalChar index
                         in
                         "\n"
-                            ++ String.fromChar entranceChar
+                            ++ String.fromChar entrance
                             ++ " -> "
-                            ++ String.fromChar exitChar
+                            ++ String.fromChar exit
                             ++ ": "
                             ++ String.fromInt portalPair.timeDelta
                             ++ "\n"
@@ -130,72 +155,10 @@ getRows array2d =
         |> List.filterMap identity
 
 
-getPortalChar portal chars =
-    case portal.tileEdge of
-        LeftEdge ->
-            chars.left
-
-        RightEdge ->
-            chars.right
-
-        TopEdge ->
-            chars.up
-
-        BottomEdge ->
-            chars.down
-
-
-getPortalPairChar portalPair index =
-    (case index of
-        0 ->
-            ( portal0Entrance, portal0Exit )
-
-        1 ->
-            ( portal1Entrance, portal1Exit )
-
-        _ ->
-            ( portalInvalid, portalInvalid )
-    )
-        |> Tuple.mapBoth
-            (getPortalChar portalPair.firstPortal)
-            (getPortalChar portalPair.secondPortal)
-
-
-portal0Entrance =
-    { left = '┤'
-    , right = '├'
-    , up = '┴'
-    , down = '┬'
-    }
-
-
-portal0Exit =
-    { left = '╡'
-    , right = '╞'
-    , up = '╨'
-    , down = '╥'
-    }
-
-
-portal1Entrance =
-    { left = '╢'
-    , right = '╟'
-    , up = '╧'
-    , down = '╤'
-    }
-
-
-portal1Exit =
-    { left = '╣'
-    , right = '╠'
-    , up = '╩'
-    , down = '╦'
-    }
-
-
-portalInvalid =
-    { left = '?'
-    , right = '?'
-    , up = '?'
-    , down = '?'
-    }
+getPortalChar : Int -> ( Char, Char )
+getPortalChar index =
+    let
+        entranceChar =
+            index + 65 |> Char.fromCode
+    in
+    ( entranceChar, Char.toLower entranceChar )
