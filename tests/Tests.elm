@@ -1,7 +1,8 @@
-module Tests exposing (..)
+module Tests exposing (all)
 
-import Test exposing (..)
 import Expect
+import Test exposing (..)
+
 
 
 -- Check out http://package.elm-lang.org/packages/elm-community/elm-test/latest to learn more about testing in Elm!
@@ -10,13 +11,29 @@ import Expect
 all : Test
 all =
     describe "A Test Suite"
-        [ test "Addition" <|
+        [ test "Basic movement" <|
             \_ ->
-                Expect.equal 10 (3 + 7)
-        , test "String.left" <|
-            \_ ->
-                Expect.equal "a" (String.left 1 "abcdefg")
-        , test "This test should fail" <|
-            \_ ->
-                Expect.fail "failed as expected!"
+                let
+                    startState =
+                        """┌─┐┌─┐┌─┐┌─┐┌─┐
+                           │█││ ││ ││ ││ │
+                           └─┘└─┘└─┘└─┘└─┘
+                           ┌─┐┌─┐┌─┐┌─┐┌─┐
+                           │█││P││ ││E││ │
+                           └─┘└─┘└─┘└─┘└─┘
+                           ┌─┐┌─┐┌─┐┌─┐┌─┐
+                           │ ││ ││ ││ ││ │
+                           └─┘└─┘└─┘└─┘└─┘
+                           ┌─┐┌─┐┌─┐┌─┐┌─┐
+                           │ ││ │A ││ ││ a
+                           └─┘└─┘└─┘└─┘└─┘
+                           ┌─┐┌─┐┌─┐┌─┐┌─┐
+                           │ ││ ││ ││ ││ │
+                           └─┘└─┘└─┘└─┘└─┘
+                           
+                           Time: 0
+                           
+                           A -> a: 2"""
+                in
+                Debug.todo ""
         ]

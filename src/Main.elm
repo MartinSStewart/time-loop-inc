@@ -141,9 +141,9 @@ view model =
     div []
         [ h1
             [ Html.Attributes.style "white-space" "pre-line"
-            , Html.Attributes.style "line-height" "40px"
+            , Html.Attributes.style "line-height" "24px"
             , Html.Attributes.style "letter-spacing" "10px"
-            , Html.Attributes.style "font-size" "50px"
+            , Html.Attributes.style "font-size" "30px"
             , Html.Attributes.style "font-family" "courier"
             ]
             [ text <| AsciiRender.view getLevel tempTimeState 0 ]

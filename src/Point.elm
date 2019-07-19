@@ -1,8 +1,13 @@
-module Point exposing (Point, add, scale)
+module Point exposing (Point, add, new, scale)
 
 
 type alias Point =
     ( Int, Int )
+
+
+new : Int -> Int -> Point
+new x y =
+    ( x, y )
 
 
 add : Point -> Point -> Point
