@@ -3,19 +3,12 @@ module LevelState exposing
     , LevelInstant
     , MoveAction(..)
     , PlayerStart
+    , instant
     )
 
 import Level exposing (Level)
 import Point exposing (Point)
 import Set exposing (Set)
-
-
-init : Level -> List MoveAction -> List LevelInstant
-init level actions =
-    [ { players = []
-      , boxes = []
-      }
-    ]
 
 
 {-| Instantaneous state of a level.
@@ -58,6 +51,21 @@ type MoveAction
 step : Level -> LevelInstant -> LevelInstant
 step level levelInstant =
     levelInstant
+
+
+instant : Level -> Int -> List MoveAction -> LevelInstant
+instant level currentTime moveActions =
+    init level
+
+
+init : Level -> LevelInstant
+init level =
+    { players = [ { position = Level.playerStart level, age = 0 } ]
+    , boxes =
+        Level.boxesStart level
+            |> Set.toList
+            |> List.map (\position -> { position = position, age = 0 })
+    }
 
 
 defaultStartTime =

@@ -3,6 +3,9 @@ module Frontend exposing (..)
 import Browser
 import Browser.Navigation
 import Element exposing (Element)
+import Element.Background
+import Element.Border
+import Element.Font
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Level, TileEdge(..))
@@ -194,7 +197,51 @@ view model =
 
 viewLoaded : Loaded_ -> Element FrontendMsg
 viewLoaded model =
-    Element.none
+    let
+        ( w, h ) =
+            Level.levelSize model.level
+
+        walls =
+            Level.getWalls model.level
+
+        instant : LevelState.LevelInstant
+        instant =
+            LevelState.instant model.level 0 [ MoveDown ]
+    in
+    Element.column
+        [ Element.padding 16, Element.spacing 8 ]
+        [ List.range 0 (w - 1)
+            |> List.map
+                (\x ->
+                    List.range 0 (h - 1)
+                        |> List.map
+                            (\y ->
+                                Element.el
+                                    [ Element.width (Element.px 32)
+                                    , Element.height (Element.px 32)
+                                    , Element.Font.center
+                                    , Element.Border.width 1
+                                    , if Set.member ( x, y ) walls then
+                                        Element.Background.color (Element.rgb 0 0 0)
+
+                                      else
+                                        Element.Background.color (Element.rgb 1 1 1)
+                                    ]
+                                    (if List.any (\player -> player.position == ( x, y )) instant.players then
+                                        Element.text "P"
+
+                                     else if List.any (\box -> box.position == ( x, y )) instant.boxes then
+                                        Element.text "B"
+
+                                     else
+                                        Element.none
+                                    )
+                            )
+                        |> Element.column []
+                )
+            |> Element.row []
+        , Element.text ("Time: " ++ String.fromInt model.currentTime)
+        ]
 
 
 subscriptions : FrontendModel -> Sub FrontendMsg

@@ -1,4 +1,4 @@
-module Level exposing (Level, Portal, PortalPair, TileEdge(..), getWalls, init)
+module Level exposing (Level, Portal, PortalPair, TileEdge(..), boxesStart, getWalls, init, levelSize, playerStart)
 
 import Point exposing (Point)
 import Set exposing (Set)
@@ -32,9 +32,24 @@ getWalls (Level level) =
     level.walls
 
 
+playerStart : Level -> Point
+playerStart (Level level) =
+    level.playerStart
+
+
+boxesStart : Level -> Set Point
+boxesStart (Level level) =
+    level.boxesStart
+
+
+levelSize : Level -> Point
+levelSize (Level level) =
+    level.levelSize
+
+
 boxesValid : Level_ -> Bool
 boxesValid level =
-    level.boxesStart |> Set.intersect level.walls |> Set.size |> (>) 0
+    level.boxesStart |> Set.intersect level.walls |> Set.size |> (==) 0
 
 
 type alias Portal =
