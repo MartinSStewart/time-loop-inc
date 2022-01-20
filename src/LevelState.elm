@@ -1,35 +1,37 @@
-module LevelState exposing (BoxStart, LevelInstant, LevelState, MoveAction(..), PlayerStart, getLevelState)
+module LevelState exposing
+    ( BoxStart
+    , LevelInstant
+    , MoveAction(..)
+    , PlayerStart
+    )
 
 import Level exposing (Level)
 import Point exposing (Point)
 import Set exposing (Set)
 
 
-init : Level -> List MoveAction -> LevelState
+init : Level -> List MoveAction -> List LevelInstant
 init level actions =
-    { playerPrimeStart = { startPosition = level.playerStart, startTime = Nothing, actions = actions }
-    , playersStart = []
-    , boxesStart =
-        level.boxesStart
-            |> Set.toList
-            |> List.map (\pos -> { startPosition = pos, startTime = Nothing })
-    }
-
-
-type alias LevelState =
-    { playerPrimeStart : PlayerStart
-    , playersStart : List PlayerStart
-    , boxesStart : List BoxStart
-    }
+    [ { players = []
+      , boxes = []
+      }
+    ]
 
 
 {-| Instantaneous state of a level.
 -}
 type alias LevelInstant =
-    { playerPrime : ( Point, List MoveAction )
-    , players : List ( Point, List MoveAction )
-    , boxes : List Point
+    { players : List PlayerInstant
+    , boxes : List BoxInstant
     }
+
+
+type alias PlayerInstant =
+    { position : Point, age : Int }
+
+
+type alias BoxInstant =
+    { position : Point, age : Int }
 
 
 type alias BoxStart =
@@ -53,57 +55,13 @@ type MoveAction
     | MoveNone
 
 
-getLevelState : Level -> List MoveAction -> Int -> LevelInstant
-getLevelState level actions viewTime =
-    let
-        state =
-            init level actions
-    in
-    { playerPrime = ( state.playerPrimeStart.startPosition, state.playerPrimeStart.actions )
-    , players = []
-    , boxes = state.boxesStart |> List.map .startPosition
-    }
-
-
-step : Level -> Int -> LevelInstant -> LevelInstant
-step level time levelInstant =
-    let
-        ( playerPos, actionsLeft ) =
-            levelInstant.playerPrime
-
-        playerPosNext =
-            movePlayer level playerPos (List.head actionsLeft |> Maybe.withDefault MoveNone)
-    in
-    { playerPrime = ( playerPosNext, List.drop 1 actionsLeft )
-    , players = levelInstant.players
-    , boxes = levelInstant.boxes
-    }
-
-
-earliestEvent : LevelState -> Maybe Int
-earliestEvent levelState =
-    List.map .startTime levelState.playersStart
-        |> (::) levelState.playerPrimeStart.startTime
-        |> (++) (List.map .startTime levelState.boxesStart)
-        |> List.filterMap identity
-        |> List.minimum
+step : Level -> LevelInstant -> LevelInstant
+step level levelInstant =
+    levelInstant
 
 
 defaultStartTime =
     0
-
-
-latestEvent : LevelState -> Maybe Int
-latestEvent levelState =
-    List.map
-        (\a -> Maybe.withDefault defaultStartTime a.startTime + List.length a.actions)
-        levelState.playersStart
-        |> (::)
-            (Maybe.withDefault defaultStartTime levelState.playerPrimeStart.startTime
-                + List.length levelState.playerPrimeStart.actions
-            )
-        |> (++) (List.map .startTime levelState.boxesStart |> List.filterMap identity)
-        |> List.minimum
 
 
 movePlayer : Level -> Point -> MoveAction -> Point
@@ -112,7 +70,7 @@ movePlayer level playerPosition action =
         nextPos =
             Point.add playerPosition (actionOffset action)
     in
-    if Set.member nextPos level.walls then
+    if Set.member nextPos (Level.getWalls level) then
         playerPosition
 
     else

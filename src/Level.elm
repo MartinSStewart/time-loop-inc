@@ -1,4 +1,4 @@
-module Level exposing (Level, Portal, PortalPair, TileEdge(..), init)
+module Level exposing (Level, Portal, PortalPair, TileEdge(..), getWalls, init)
 
 import Point exposing (Point)
 import Set exposing (Set)
@@ -18,23 +18,18 @@ type alias Level_ =
     }
 
 
-init : Point -> Point -> Exit -> Set Point -> List PortalPair -> Set Point -> Result String Level
-init levelSize playerStart exit walls portalPairs boxes =
-    let
-        level =
-            { playerStart = playerStart
-            , walls = walls
-            , boxesStart = boxes
-            , exit = exit
-            , levelSize = levelSize
-            , portalPairs = portalPairs
-            }
-    in
+init : Level_ -> Result String Level
+init level =
     if boxesValid level then
         Level level |> Ok
 
     else
         Err "Failed to create level"
+
+
+getWalls : Level -> Set Point
+getWalls (Level level) =
+    level.walls
 
 
 boxesValid : Level_ -> Bool
