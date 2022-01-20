@@ -6,11 +6,14 @@ import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
+import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Level, TileEdge(..))
 import LevelState exposing (MoveAction(..))
+import List.Nonempty exposing (Nonempty)
 import Maybe.Extra as Maybe
+import Point exposing (Point)
 import Set exposing (Set)
 import Types exposing (..)
 import Url exposing (Url)
@@ -146,6 +149,12 @@ updateLoaded msg model =
         UrlChanged url ->
             Debug.todo ""
 
+        PressedTimeMinus ->
+            ( { model | currentTime = model.currentTime - 1 }, Cmd.none )
+
+        PressedTimePlus ->
+            ( { model | currentTime = model.currentTime + 1 }, Cmd.none )
+
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
 updateFromBackend msg model =
@@ -166,13 +175,6 @@ addCmd cmd a =
 
 
 ---- VIEW ----
-
-
-tempTimeState =
-    { playerPrime = ( ( 1, 1 ), [] )
-    , players = []
-    , boxes = []
-    }
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -201,12 +203,17 @@ viewLoaded model =
         ( w, h ) =
             Level.levelSize model.level
 
+        walls : Set Point
         walls =
             Level.getWalls model.level
 
-        instant : LevelState.LevelInstant
-        instant =
-            LevelState.instant model.level 0 [ MoveDown ]
+        timeline : Nonempty LevelState.LevelInstant
+        timeline =
+            LevelState.instant model.level [ MoveDown ]
+
+        current : LevelState.LevelInstant
+        current =
+            List.Nonempty.get (clamp 0 (List.Nonempty.length timeline - 1) model.currentTime) timeline
     in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
@@ -227,10 +234,10 @@ viewLoaded model =
                                       else
                                         Element.Background.color (Element.rgb 1 1 1)
                                     ]
-                                    (if List.any (\player -> player.position == ( x, y )) instant.players then
+                                    (if List.any (\player -> player.position == ( x, y )) current.players then
                                         Element.text "P"
 
-                                     else if List.any (\box -> box.position == ( x, y )) instant.boxes then
+                                     else if List.any (\box -> box.position == ( x, y )) current.boxes then
                                         Element.text "B"
 
                                      else
@@ -240,8 +247,29 @@ viewLoaded model =
                         |> Element.column []
                 )
             |> Element.row []
-        , Element.text ("Time: " ++ String.fromInt model.currentTime)
+        , Element.row
+            [ Element.spacing 8 ]
+            [ button
+                [ Element.padding 8
+                , Element.Background.color (Element.rgb 0.7 0.7 0.7)
+                ]
+                { onPress = PressedTimeMinus, label = Element.text "-" }
+            , Element.text ("Time: " ++ String.fromInt model.currentTime)
+            , button
+                [ Element.padding 8
+                , Element.Background.color (Element.rgb 0.7 0.7 0.7)
+                ]
+                { onPress = PressedTimePlus, label = Element.text "+" }
+            ]
         ]
+
+
+button attributes { onPress, label } =
+    Element.Input.button
+        attributes
+        { onPress = Just onPress
+        , label = label
+        }
 
 
 subscriptions : FrontendModel -> Sub FrontendMsg

@@ -1,12 +1,12 @@
 module LevelState exposing
-    ( BoxStart
-    , LevelInstant
+    ( LevelInstant
     , MoveAction(..)
-    , PlayerStart
     , instant
     )
 
 import Level exposing (Level)
+import List.Extra as List
+import List.Nonempty exposing (Nonempty(..))
 import Point exposing (Point)
 import Set exposing (Set)
 
@@ -27,19 +27,6 @@ type alias BoxInstant =
     { position : Point, age : Int }
 
 
-type alias BoxStart =
-    { startPosition : Point
-    , startTime : Maybe Int
-    }
-
-
-type alias PlayerStart =
-    { startPosition : Point
-    , startTime : Maybe Int
-    , actions : List MoveAction
-    }
-
-
 type MoveAction
     = MoveUp
     | MoveLeft
@@ -48,14 +35,33 @@ type MoveAction
     | MoveNone
 
 
-step : Level -> LevelInstant -> LevelInstant
-step level levelInstant =
-    levelInstant
+step : Level -> List MoveAction -> LevelInstant -> LevelInstant
+step level moveActions levelInstant =
+    { levelInstant
+        | players =
+            List.map
+                (\player ->
+                    { position =
+                        case List.getAt player.age moveActions of
+                            Just action ->
+                                Point.add (actionOffset action) player.position
+
+                            Nothing ->
+                                player.position
+                    , age = player.age + 1
+                    }
+                )
+                levelInstant.players
+    }
 
 
-instant : Level -> Int -> List MoveAction -> LevelInstant
-instant level currentTime moveActions =
-    init level
+instant : Level -> List MoveAction -> Nonempty LevelInstant
+instant level moveActions =
+    let
+        first =
+            init level
+    in
+    Nonempty first [ step level moveActions first ]
 
 
 init : Level -> LevelInstant
@@ -66,10 +72,6 @@ init level =
             |> Set.toList
             |> List.map (\position -> { position = position, age = 0 })
     }
-
-
-defaultStartTime =
-    0
 
 
 movePlayer : Level -> Point -> MoveAction -> Point

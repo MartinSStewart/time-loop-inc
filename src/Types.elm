@@ -40,6 +40,8 @@ type FrontendMsg
     = UrlClicked UrlRequest
     | UrlChanged Url
     | KeyMsg Keyboard.Msg
+    | PressedTimeMinus
+    | PressedTimePlus
 
 
 type ToBackend
