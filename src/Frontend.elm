@@ -1,5 +1,6 @@
 module Frontend exposing (..)
 
+import AssocSet as Set exposing (Set)
 import Browser
 import Browser.Navigation
 import Element exposing (Element)
@@ -9,12 +10,11 @@ import Element.Font
 import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
-import Level exposing (Level, TileEdge(..))
-import LevelState exposing (LevelInstant, MoveAction(..))
+import Level exposing (Level, Portal, TileEdge(..))
+import LevelState exposing (LevelInstant, MoveAction(..), Timeline)
 import List.Nonempty exposing (Nonempty)
 import Maybe.Extra as Maybe
 import Point exposing (Point)
-import Set exposing (Set)
 import Types exposing (..)
 import Url exposing (Url)
 
@@ -47,7 +47,7 @@ getLevel =
             }
         , levelSize = ( 5, 5 )
         , portalPairs =
-            [ { firstPortal = { position = ( 2, 3 ), tileEdge = LeftEdge }
+            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
               , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
               , timeDelta = 2
               }
@@ -209,13 +209,23 @@ viewLoaded model =
         walls =
             Level.getWalls model.level
 
-        timeline : Nonempty LevelInstant
+        timeline : Timeline
         timeline =
             LevelState.timeline model.level model.playerActions
 
         current : LevelInstant
         current =
-            List.Nonempty.get (clamp 0 (List.Nonempty.length timeline - 1) model.currentTime) timeline
+            List.Nonempty.get
+                (clamp 0 (List.Nonempty.length timeline.instants - 1) (model.currentTime - timeline.startTime))
+                timeline.instants
+
+        portals : List Portal
+        portals =
+            Level.portalPairs model.level
+                |> List.concatMap
+                    (\portalPair ->
+                        [ portalPair.firstPortal, portalPair.secondPortal ]
+                    )
     in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
@@ -225,11 +235,45 @@ viewLoaded model =
                     List.range 0 (h - 1)
                         |> List.map
                             (\y ->
+                                let
+                                    localPortals : Set TileEdge
+                                    localPortals =
+                                        List.filterMap
+                                            (\portal ->
+                                                if portal.position == ( x, y ) then
+                                                    Just portal.tileEdge
+
+                                                else
+                                                    Nothing
+                                            )
+                                            portals
+                                            |> Set.fromList
+
+                                    a tileEdge =
+                                        if Set.member tileEdge localPortals then
+                                            6
+
+                                        else
+                                            0
+                                in
                                 Element.el
                                     [ Element.width (Element.px 32)
                                     , Element.height (Element.px 32)
                                     , Element.Font.center
                                     , Element.Border.width 1
+                                    , Element.el
+                                        [ Element.Border.widthEach
+                                            { left = a LeftEdge
+                                            , right = a RightEdge
+                                            , top = a TopEdge
+                                            , bottom = a BottomEdge
+                                            }
+                                        , Element.Border.color (Element.rgb 0.3 0.3 1)
+                                        , Element.width Element.fill
+                                        , Element.height Element.fill
+                                        ]
+                                        Element.none
+                                        |> Element.inFront
                                     , if Set.member ( x, y ) walls then
                                         Element.Background.color (Element.rgb 0 0 0)
 

@@ -1,14 +1,15 @@
 module LevelState exposing
     ( LevelInstant
     , MoveAction(..)
+    , Timeline
     , timeline
     )
 
-import Level exposing (Level)
+import AssocSet as Set exposing (Set)
+import Level exposing (Level, PortalPair)
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Point exposing (Point)
-import Set exposing (Set)
 
 
 {-| Instantaneous state of a level.
@@ -54,7 +55,11 @@ moveActionReverse moveAction =
             MoveNone
 
 
-step : Level -> List MoveAction -> LevelInstant -> LevelInstant
+step :
+    Level
+    -> List MoveAction
+    -> LevelInstant
+    -> { nextInstant : LevelInstant, playerTimeTravel : List PlayerInstant }
 step level moveActions levelInstant =
     let
         getMoveAction : PlayerInstant -> Maybe MoveAction
@@ -66,63 +71,70 @@ step level moveActions levelInstant =
                 (Point.add (actionOffset moveAction |> Point.negate) box.position)
                 levelInstant
                 |> List.any (\player -> getMoveAction player == Just moveAction)
+
+        portalPairs : List PortalPair
+        portalPairs =
+            Level.portalPairs level
+
+        nextInstant =
+            { levelInstant
+                | players =
+                    List.map
+                        (\player ->
+                            { position =
+                                case getMoveAction player of
+                                    Just action ->
+                                        let
+                                            newPosition =
+                                                Point.add (actionOffset action) player.position
+                                        in
+                                        if Level.isWall level newPosition then
+                                            player.position
+
+                                        else
+                                            newPosition
+
+                                    Nothing ->
+                                        player.position
+                            , age = player.age + 1
+                            }
+                        )
+                        levelInstant.players
+                , boxes =
+                    List.map
+                        (\box ->
+                            let
+                                tryMove : MoveAction -> Maybe Point
+                                tryMove moveAction =
+                                    if
+                                        boxIsPushed box moveAction
+                                            && not (boxIsPushed box (moveActionReverse moveAction))
+                                    then
+                                        let
+                                            newPosition =
+                                                Point.add (actionOffset moveAction) box.position
+                                        in
+                                        if Level.isWall level newPosition then
+                                            Nothing
+
+                                        else
+                                            Just newPosition
+
+                                    else
+                                        Nothing
+                            in
+                            { position =
+                                [ MoveRight, MoveLeft, MoveUp, MoveDown ]
+                                    |> List.filterMap tryMove
+                                    |> List.head
+                                    |> Maybe.withDefault box.position
+                            , age = box.age + 1
+                            }
+                        )
+                        levelInstant.boxes
+            }
     in
-    { levelInstant
-        | players =
-            List.map
-                (\player ->
-                    { position =
-                        case getMoveAction player of
-                            Just action ->
-                                let
-                                    newPosition =
-                                        Point.add (actionOffset action) player.position
-                                in
-                                if Level.isWall level newPosition then
-                                    player.position
-
-                                else
-                                    newPosition
-
-                            Nothing ->
-                                player.position
-                    , age = player.age + 1
-                    }
-                )
-                levelInstant.players
-        , boxes =
-            List.map
-                (\box ->
-                    let
-                        tryMove : MoveAction -> Maybe Point
-                        tryMove moveAction =
-                            if
-                                boxIsPushed box moveAction
-                                    && not (boxIsPushed box (moveActionReverse moveAction))
-                            then
-                                let
-                                    newPosition =
-                                        Point.add (actionOffset moveAction) box.position
-                                in
-                                if Level.isWall level newPosition then
-                                    Nothing
-
-                                else
-                                    Just newPosition
-
-                            else
-                                Nothing
-                    in
-                    { position =
-                        [ MoveRight, MoveLeft, MoveUp, MoveDown ]
-                            |> List.filterMap tryMove
-                            |> List.head
-                            |> Maybe.withDefault box.position
-                    , age = box.age + 1
-                    }
-                )
-                levelInstant.boxes
-    }
+    { nextInstant = nextInstant, playerTimeTravel = [] }
 
 
 getPlayerAt : Point -> LevelInstant -> List PlayerInstant
@@ -135,7 +147,7 @@ getBoxAt point levelInstant =
     List.filter (\box -> box.position == point) levelInstant.boxes
 
 
-timeline : Level -> List MoveAction -> Nonempty LevelInstant
+timeline : Level -> List MoveAction -> Timeline
 timeline level moveActions =
     let
         first =
@@ -144,7 +156,8 @@ timeline level moveActions =
     Nonempty first (timelineHelper level first moveActions)
 
 
-timelineHelper level previousInstant moveActions =
+timelineHelper : Level -> Nonempty LevelInstant -> List MoveAction -> Nonempty LevelInstant
+timelineHelper level previousInstants moveActions =
     let
         newInstant =
             step level moveActions previousInstant
@@ -154,6 +167,12 @@ timelineHelper level previousInstant moveActions =
 
     else
         newInstant :: timelineHelper level newInstant moveActions
+
+
+type alias Timeline =
+    { startTime : Int
+    , instants : Nonempty LevelInstant
+    }
 
 
 init : Level -> LevelInstant

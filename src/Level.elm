@@ -1,7 +1,7 @@
-module Level exposing (Level, Portal, PortalPair, TileEdge(..), boxesStart, getWalls, init, isWall, levelSize, playerStart)
+module Level exposing (Level, Portal, PortalPair, TileEdge(..), boxesStart, getWalls, init, isWall, levelSize, playerStart, portalPairs)
 
+import AssocSet as Set exposing (Set)
 import Point exposing (Point)
-import Set exposing (Set)
 
 
 type Level
@@ -16,6 +16,11 @@ type alias Level_ =
     , levelSize : Point
     , portalPairs : List PortalPair
     }
+
+
+portalPairs : Level -> List PortalPair
+portalPairs (Level level) =
+    level.portalPairs
 
 
 init : Level_ -> Result String Level
