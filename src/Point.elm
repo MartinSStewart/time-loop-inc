@@ -1,4 +1,4 @@
-module Point exposing (Point, add, new, scale)
+module Point exposing (Point, add, clamp, negate, new, scale)
 
 
 type alias Point =
@@ -18,3 +18,13 @@ add ( x0, y0 ) ( x1, y1 ) =
 scale : Int -> Point -> Point
 scale amount ( x, y ) =
     ( x * amount, y * amount )
+
+
+clamp : Point -> Point -> Point -> Point
+clamp ( minX, minY ) ( maxX, maxY ) ( x, y ) =
+    new (Basics.clamp minX maxX x) (Basics.clamp minY maxY y)
+
+
+negate : Point -> Point
+negate ( x, y ) =
+    new -x -y

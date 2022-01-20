@@ -1,6 +1,5 @@
 module Backend exposing (..)
 
-import Html
 import Lamdera exposing (ClientId, SessionId)
 import Types exposing (..)
 

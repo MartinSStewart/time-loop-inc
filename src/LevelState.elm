@@ -37,14 +37,33 @@ type MoveAction
 
 step : Level -> List MoveAction -> LevelInstant -> LevelInstant
 step level moveActions levelInstant =
+    let
+        getMoveAction : PlayerInstant -> Maybe MoveAction
+        getMoveAction player =
+            List.getAt player.age moveActions
+
+        boxIsPushed box moveAction =
+            getPlayerAt
+                (Point.add (actionOffset moveAction |> Point.negate) box.position)
+                levelInstant
+                |> List.any (\player -> getMoveAction player == Just moveAction)
+    in
     { levelInstant
         | players =
             List.map
                 (\player ->
                     { position =
-                        case List.getAt player.age moveActions of
+                        case getMoveAction player of
                             Just action ->
-                                Point.add (actionOffset action) player.position
+                                let
+                                    newPosition =
+                                        Point.add (actionOffset action) player.position
+                                in
+                                if Level.isWall level newPosition then
+                                    player.position
+
+                                else
+                                    newPosition
 
                             Nothing ->
                                 player.position
@@ -52,7 +71,38 @@ step level moveActions levelInstant =
                     }
                 )
                 levelInstant.players
+        , boxes =
+            List.map
+                (\box ->
+                    { position =
+                        if boxIsPushed box MoveRight then
+                            let
+                                newPosition =
+                                    Point.add (actionOffset MoveRight) box.position
+                            in
+                            if Level.isWall level newPosition then
+                                box.position
+
+                            else
+                                newPosition
+
+                        else
+                            box.position
+                    , age = box.age + 1
+                    }
+                )
+                levelInstant.boxes
     }
+
+
+getPlayerAt : Point -> LevelInstant -> List PlayerInstant
+getPlayerAt point levelInstant =
+    List.filter (\player -> player.position == point) levelInstant.players
+
+
+getBoxAt : Point -> LevelInstant -> List BoxInstant
+getBoxAt point levelInstant =
+    List.filter (\box -> box.position == point) levelInstant.boxes
 
 
 instant : Level -> List MoveAction -> Nonempty LevelInstant

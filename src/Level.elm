@@ -1,4 +1,4 @@
-module Level exposing (Level, Portal, PortalPair, TileEdge(..), boxesStart, getWalls, init, levelSize, playerStart)
+module Level exposing (Level, Portal, PortalPair, TileEdge(..), boxesStart, getWalls, init, isWall, levelSize, playerStart)
 
 import Point exposing (Point)
 import Set exposing (Set)
@@ -30,6 +30,12 @@ init level =
 getWalls : Level -> Set Point
 getWalls (Level level) =
     level.walls
+
+
+isWall : Level -> Point -> Bool
+isWall (Level level) position =
+    Set.member position level.walls
+        || (Point.clamp (Point.new 0 0) level.levelSize position /= position)
 
 
 playerStart : Level -> Point

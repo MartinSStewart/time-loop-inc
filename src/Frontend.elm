@@ -10,7 +10,7 @@ import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Level, TileEdge(..))
-import LevelState exposing (MoveAction(..))
+import LevelState exposing (LevelInstant, MoveAction(..))
 import List.Nonempty exposing (Nonempty)
 import Maybe.Extra as Maybe
 import Point exposing (Point)
@@ -116,6 +116,7 @@ updateLoaded msg model =
                             { model
                                 | playerActions =
                                     model.playerActions |> List.reverse |> List.drop 1 |> List.reverse
+                                , currentTime = model.currentTime - 1
                             }
 
                         _ ->
@@ -140,8 +141,19 @@ updateLoaded msg model =
                     else
                         Nothing
             in
-            { model_ | keys = newKeys, playerActions = model_.playerActions ++ Maybe.toList action }
-                |> addCmdNone
+            ( { model_
+                | keys = newKeys
+                , playerActions = model_.playerActions ++ Maybe.toList action
+                , currentTime =
+                    case action of
+                        Just _ ->
+                            model_.currentTime + 1
+
+                        Nothing ->
+                            model_.currentTime
+              }
+            , Cmd.none
+            )
 
         UrlClicked urlRequest ->
             Debug.todo ""
@@ -161,16 +173,6 @@ updateFromBackend msg model =
     case msg of
         NoOpToFrontend ->
             ( model, Cmd.none )
-
-
-addCmdNone : a -> ( a, Cmd msg )
-addCmdNone a =
-    ( a, Cmd.none )
-
-
-addCmd : Cmd msg -> a -> ( a, Cmd msg )
-addCmd cmd a =
-    ( a, cmd )
 
 
 
@@ -207,11 +209,11 @@ viewLoaded model =
         walls =
             Level.getWalls model.level
 
-        timeline : Nonempty LevelState.LevelInstant
+        timeline : Nonempty LevelInstant
         timeline =
-            LevelState.instant model.level [ MoveDown ]
+            LevelState.instant model.level model.playerActions
 
-        current : LevelState.LevelInstant
+        current : LevelInstant
         current =
             List.Nonempty.get (clamp 0 (List.Nonempty.length timeline - 1) model.currentTime) timeline
     in
