@@ -35,7 +35,12 @@ getWalls (Level level) =
 isWall : Level -> Point -> Bool
 isWall (Level level) position =
     Set.member position level.walls
-        || (Point.clamp (Point.new 0 0) level.levelSize position /= position)
+        || (Point.clamp
+                (Point.new 0 0)
+                (Point.add (Point.new -1 -1) level.levelSize)
+                position
+                /= position
+           )
 
 
 playerStart : Level -> Point

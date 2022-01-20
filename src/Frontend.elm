@@ -211,7 +211,7 @@ viewLoaded model =
 
         timeline : Nonempty LevelInstant
         timeline =
-            LevelState.instant model.level model.playerActions
+            LevelState.timeline model.level model.playerActions
 
         current : LevelInstant
         current =

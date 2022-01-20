@@ -32,8 +32,7 @@ type alias LoadingFailed_ =
 
 
 type alias BackendModel =
-    { message : String
-    }
+    {}
 
 
 type FrontendMsg
