@@ -54,9 +54,10 @@ moveActionReverse moveAction =
 step :
     Level
     -> List (Maybe MoveAction)
+    -> List PlayerInstant
     -> LevelInstant
     -> { nextInstant : LevelInstant, playerTimeTravel : List ( Int, PlayerInstant ) }
-step level moveActions levelInstant =
+step level moveActions timeTravellers levelInstant =
     let
         getMoveAction : PlayerInstant -> Maybe MoveAction
         getMoveAction player =
@@ -118,6 +119,7 @@ step level moveActions levelInstant =
                                     |> Just
                         )
                         levelInstant.players
+                        ++ timeTravellers
                 , boxes =
                     List.map
                         (\box ->
@@ -188,23 +190,37 @@ getBoxAt point levelInstant =
 
 timeline : Level -> List (Maybe MoveAction) -> RegularDict.Dict Int LevelInstant
 timeline level moveActions =
-    timelineHelper level (RegularDict.singleton 0 (init 0 level)) 0 moveActions
+    timelineHelper level (RegularDict.singleton 0 (init 0 level)) [] 0 moveActions
 
 
 timelineHelper :
     Level
     -> RegularDict.Dict Int LevelInstant
+    -> List { appearTime : Int, player : PlayerInstant }
     -> Int
     -> List (Maybe MoveAction)
     -> RegularDict.Dict Int LevelInstant
-timelineHelper level timeline_ currentTime moveActions =
+timelineHelper level timeline_ futurePlayers currentTime moveActions =
     let
         --_ =
         --    Debug.log "" ( currentTime, timeline_ )
         { nextInstant, playerTimeTravel } =
             case RegularDict.get currentTime timeline_ of
                 Just currentInstant ->
-                    step level moveActions currentInstant
+                    step
+                        level
+                        moveActions
+                        (List.filterMap
+                            (\{ appearTime, player } ->
+                                if appearTime == currentTime + 1 then
+                                    Just player
+
+                                else
+                                    Nothing
+                            )
+                            futurePlayers
+                        )
+                        currentInstant
 
                 Nothing ->
                     Debug.todo "Failed to get instant"
@@ -215,24 +231,52 @@ timelineHelper level timeline_ currentTime moveActions =
                 newTime =
                     currentTime + timeDelta
             in
-            case RegularDict.get newTime timeline_ of
-                Just timeTravelInstant ->
-                    if List.any ((==) player) timeTravelInstant.players then
-                        --let
-                        --    _ =
-                        --        Debug.log "stable instant" ""
-                        --in
-                        timelineHelper
-                            level
-                            (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                            (currentTime + 1)
-                            moveActions
+            if timeDelta > 0 then
+                timelineHelper
+                    level
+                    (RegularDict.insert (currentTime + 1) nextInstant timeline_)
+                    ({ appearTime = newTime, player = player } :: futurePlayers)
+                    (currentTime + 1)
+                    moveActions
 
-                    else
-                        --let
-                        --    _ =
-                        --        Debug.log "existing instant" ""
-                        --in
+            else
+                case RegularDict.get newTime timeline_ of
+                    Just timeTravelInstant ->
+                        if List.any ((==) player) timeTravelInstant.players then
+                            --let
+                            --    _ =
+                            --        Debug.log "stable instant" ""
+                            --in
+                            timelineHelper
+                                level
+                                (RegularDict.insert (currentTime + 1) nextInstant timeline_)
+                                futurePlayers
+                                (currentTime + 1)
+                                moveActions
+
+                        else
+                            --let
+                            --    _ =
+                            --        Debug.log "existing instant" ""
+                            --in
+                            timelineHelper
+                                level
+                                (RegularDict.insert
+                                    newTime
+                                    { timeTravelInstant | players = player :: timeTravelInstant.players }
+                                    timeline_
+                                )
+                                futurePlayers
+                                newTime
+                                moveActions
+
+                    Nothing ->
+                        let
+                            --_ =
+                            --    Debug.log "new instant" ""
+                            timeTravelInstant =
+                                init newTime level
+                        in
                         timelineHelper
                             level
                             (RegularDict.insert
@@ -240,45 +284,38 @@ timelineHelper level timeline_ currentTime moveActions =
                                 { timeTravelInstant | players = player :: timeTravelInstant.players }
                                 timeline_
                             )
+                            futurePlayers
                             newTime
                             moveActions
 
-                Nothing ->
-                    let
-                        --_ =
-                        --    Debug.log "new instant" ""
-                        timeTravelInstant =
-                            if newTime < 0 then
-                                init newTime level
-
-                            else
-                                RegularDict.toList timeline_
-                                    |> List.sortBy Tuple.first
-                                    |> List.dropWhile (\( time, _ ) -> time < newTime)
-                                    |> List.head
-                                    |> Maybe.map Tuple.second
-                                    |> Maybe.withDefault (init newTime level)
-                    in
-                    timelineHelper
-                        level
-                        (RegularDict.insert
-                            newTime
-                            { timeTravelInstant | players = player :: timeTravelInstant.players }
-                            timeline_
-                        )
-                        newTime
-                        moveActions
-
         [] ->
-            if currentTime > List.length moveActions then
+            if isTimelineFinished timeline_ moveActions currentTime then
                 timeline_
 
             else
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
+                    futurePlayers
                     (currentTime + 1)
                     moveActions
+
+
+isTimelineFinished : RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Int -> Bool
+isTimelineFinished timeline_ moveActions currentTime =
+    let
+        timelineList =
+            RegularDict.toList timeline_
+
+        latestTime =
+            List.maximumBy Tuple.first timelineList |> Maybe.map Tuple.first |> Maybe.withDefault 0
+
+        totalMoves =
+            List.length moveActions
+    in
+    List.any (\( _, instant ) -> List.any (.age >> (==) totalMoves) instant.players) timelineList
+        && currentTime
+        >= latestTime
 
 
 init : Int -> Level -> LevelInstant

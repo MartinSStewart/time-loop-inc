@@ -7,7 +7,7 @@ import Element.Font
 import Frontend
 import Html exposing (Html)
 import Level exposing (Level, TileEdge(..))
-import LevelState exposing (MoveAction(..))
+import LevelState exposing (LevelInstant, MoveAction(..))
 
 
 main : Html ()
@@ -68,8 +68,7 @@ test0 =
             LevelState.timeline level0 moveActions
 
         expected =
-            [ ( 2, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 2, position = ( 2, 1 ) } ] } )
-            , ( 1, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
+            [ ( 1, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
             , ( 0, { boxes = [ { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
             ]
                 |> RegularDict.fromList
@@ -80,12 +79,7 @@ test0 =
      else
         Failed
     )
-        (Element.row
-            [ Element.spacing 8 ]
-            [ Frontend.viewLevel level0 output 0
-            , Frontend.viewLevel level0 output 1
-            ]
-        )
+        (actualAndExpected output expected)
 
 
 test1 : TestResult
@@ -102,8 +96,6 @@ test1 =
             , ( 0, { boxes = [], players = [ { age = 3, position = ( 1, 2 ) }, { age = 0, position = ( 3, 3 ) } ] } )
             , ( 1, { boxes = [], players = [ { age = 4, position = ( 1, 2 ) }, { age = 1, position = ( 4, 3 ) } ] } )
             , ( 2, { boxes = [], players = [ { age = 5, position = ( 1, 2 ) } ] } )
-            , ( 3, { boxes = [], players = [ { age = 6, position = ( 1, 2 ) } ] } )
-            , ( 4, { boxes = [], players = [ { age = 7, position = ( 1, 2 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
@@ -113,24 +105,17 @@ test1 =
      else
         Failed
     )
-        (Element.column
-            [ Element.spacing 4 ]
-            [ Element.el [ Element.Font.size 14 ] (Element.text "Actual:")
-            , Element.row
-                [ Element.spacing 8 ]
-                [ Frontend.viewLevel level1 output -1
-                , Frontend.viewLevel level1 output 0
-                , Frontend.viewLevel level1 output 1
-                ]
-            , Element.el [ Element.Font.size 14 ] (Element.text "Expected:")
-            , Element.row
-                [ Element.spacing 8 ]
-                [ Frontend.viewLevel level1 expected -1
-                , Frontend.viewLevel level1 expected 0
-                , Frontend.viewLevel level1 expected 1
-                ]
-            ]
-        )
+        (actualAndExpected output expected)
+
+
+actualAndExpected actual expected =
+    Element.column
+        [ Element.spacing 4 ]
+        [ Element.el [ Element.Font.size 14 ] (Element.text "Actual:")
+        , showInstants actual
+        , Element.el [ Element.Font.size 14 ] (Element.text "Expected:")
+        , showInstants expected
+        ]
 
 
 test2 : TestResult
@@ -140,11 +125,12 @@ test2 =
             [ Just MoveLeft, Just MoveLeft, Just MoveLeft ]
 
         output =
-            LevelState.timeline level2 moveActions
+            LevelState.timeline level2 moveActions |> Debug.log ""
 
         expected =
             [ ( 0, { boxes = [], players = [ { age = 0, position = ( 1, 2 ) } ] } )
             , ( 1, { boxes = [], players = [ { age = 1, position = ( 0, 2 ) } ] } )
+            , ( 2, { boxes = [], players = [] } )
             , ( 3, { boxes = [], players = [ { age = 2, position = ( 4, 3 ) } ] } )
             , ( 4, { boxes = [], players = [ { age = 3, position = ( 3, 3 ) } ] } )
             ]
@@ -156,28 +142,15 @@ test2 =
      else
         Failed
     )
-        (Element.column
-            [ Element.spacing 4 ]
-            [ Element.el [ Element.Font.size 14 ] (Element.text "Actual:")
-            , Element.row
-                [ Element.spacing 8 ]
-                [ Frontend.viewLevel level2 output 0
-                , Frontend.viewLevel level2 output 1
-                , Frontend.viewLevel level2 output 2
-                , Frontend.viewLevel level2 output 3
-                , Frontend.viewLevel level2 output 4
-                ]
-            , Element.el [ Element.Font.size 14 ] (Element.text "Expected:")
-            , Element.row
-                [ Element.spacing 8 ]
-                [ Frontend.viewLevel level2 expected 0
-                , Frontend.viewLevel level2 expected 1
-                , Frontend.viewLevel level2 expected 2
-                , Frontend.viewLevel level2 expected 3
-                , Frontend.viewLevel level2 expected 4
-                ]
-            ]
-        )
+        (actualAndExpected output expected)
+
+
+showInstants : RegularDict.Dict Int LevelInstant -> Element msg
+showInstants dict =
+    RegularDict.keys dict
+        |> List.sort
+        |> List.map (Frontend.viewLevel level2 dict)
+        |> Element.row [ Element.spacing 8 ]
 
 
 level0 : Level
