@@ -158,10 +158,17 @@ updateLoaded msg model =
             )
 
         UrlClicked urlRequest ->
-            Debug.todo ""
+            ( model
+            , case urlRequest of
+                Browser.Internal url ->
+                    Browser.Navigation.pushUrl model.navigationKey (Url.toString url)
+
+                Browser.External url ->
+                    Browser.Navigation.load url
+            )
 
         UrlChanged url ->
-            Debug.todo ""
+            ( model, Cmd.none )
 
         PressedTimeMinus ->
             let

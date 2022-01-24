@@ -223,7 +223,8 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                         currentInstant
 
                 Nothing ->
-                    Debug.todo "Failed to get instant"
+                    --Debug.todo "Failed to get instant"
+                    timeline_
     in
     case playerTimeTravel of
         ( timeDelta, player ) :: _ ->
