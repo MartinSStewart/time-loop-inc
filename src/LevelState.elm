@@ -224,7 +224,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
 
                 Nothing ->
                     --Debug.todo "Failed to get instant"
-                    timeline_
+                    { nextInstant = { boxes = [], players = [] }, playerTimeTravel = [] }
     in
     case playerTimeTravel of
         ( timeDelta, player ) :: _ ->
