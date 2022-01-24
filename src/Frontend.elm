@@ -292,16 +292,33 @@ viewLevel level timeline currentTime =
                                 ]
                                 (case List.find (\player -> player.position == ( x, y )) current.players of
                                     Just player ->
-                                        "P" ++ String.fromInt player.age |> Element.text
+                                        Element.row
+                                            [ Element.centerX, Element.centerY ]
+                                            [ Element.text "P"
+                                            , String.fromInt player.age
+                                                |> Element.text
+                                                |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
+                                            ]
 
                                     Nothing ->
                                         if List.any (\box -> box.position == ( x, y )) current.boxes then
-                                            Element.text "B"
+                                            Element.el [ Element.centerX, Element.centerY ] (Element.text "▨")
 
                                         else
                                             case List.head localPortals of
                                                 Just ( timeDelta, _ ) ->
-                                                    String.fromInt timeDelta |> Element.text
+                                                    (if timeDelta < 0 then
+                                                        "t" ++ String.fromInt timeDelta
+
+                                                     else
+                                                        "t+" ++ String.fromInt timeDelta
+                                                    )
+                                                        |> Element.text
+                                                        |> Element.el
+                                                            [ Element.Font.size 12
+                                                            , Element.centerX
+                                                            , Element.centerY
+                                                            ]
 
                                                 Nothing ->
                                                     Element.none
