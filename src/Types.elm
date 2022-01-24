@@ -20,7 +20,7 @@ type alias Loading_ =
 
 type alias Loaded_ =
     { navigationKey : Key
-    , playerActions : List MoveAction
+    , playerActions : List (Maybe MoveAction)
     , currentTime : Int
     , keys : List Keyboard.Key
     , level : Level

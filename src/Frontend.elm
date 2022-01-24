@@ -1,8 +1,10 @@
 module Frontend exposing (..)
 
+import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Browser
 import Browser.Navigation
+import Dict as RegularDict
 import Element exposing (Element)
 import Element.Background
 import Element.Border
@@ -11,8 +13,8 @@ import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Level, Portal, TileEdge(..))
-import LevelState exposing (LevelInstant, MoveAction(..), Timeline)
-import List.Nonempty exposing (Nonempty)
+import LevelState exposing (LevelInstant, MoveAction(..))
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Point exposing (Point)
 import Types exposing (..)
@@ -124,19 +126,19 @@ updateLoaded msg model =
 
                 action =
                     if keyPressed Keyboard.ArrowLeft then
-                        Just MoveLeft
+                        Just (Just MoveLeft)
 
                     else if keyPressed Keyboard.ArrowRight then
-                        Just MoveRight
+                        Just (Just MoveRight)
 
                     else if keyPressed Keyboard.ArrowUp then
-                        Just MoveUp
+                        Just (Just MoveUp)
 
                     else if keyPressed Keyboard.ArrowDown then
-                        Just MoveDown
+                        Just (Just MoveDown)
 
                     else if keyPressed Keyboard.Spacebar then
-                        Just MoveNone
+                        Just Nothing
 
                     else
                         Nothing
@@ -199,100 +201,118 @@ view model =
     }
 
 
-viewLoaded : Loaded_ -> Element FrontendMsg
-viewLoaded model =
+viewLevel : Level -> List (Maybe MoveAction) -> Int -> Element msg
+viewLevel level playerActions currentTime =
     let
         ( w, h ) =
-            Level.levelSize model.level
+            Level.levelSize level
 
         walls : Set Point
         walls =
-            Level.getWalls model.level
+            Level.getWalls level
 
-        timeline : Timeline
+        timeline : RegularDict.Dict Int LevelInstant
         timeline =
-            LevelState.timeline model.level model.playerActions
+            LevelState.timeline level playerActions
+
+        latestInstant =
+            RegularDict.keys timeline |> List.maximum |> Maybe.withDefault 0
+
+        earliestInstant =
+            RegularDict.keys timeline |> List.minimum |> Maybe.withDefault 0
 
         current : LevelInstant
         current =
-            List.Nonempty.get
-                (clamp 0 (List.Nonempty.length timeline.instants - 1) (model.currentTime - timeline.startTime))
-                timeline.instants
+            RegularDict.get (clamp earliestInstant latestInstant currentTime) timeline
+                |> Maybe.withDefault { players = [], boxes = [] }
 
-        portals : List Portal
+        portals : List { timeDelta : Int, portal : Portal }
         portals =
-            Level.portalPairs model.level
+            Level.portalPairs level
                 |> List.concatMap
                     (\portalPair ->
-                        [ portalPair.firstPortal, portalPair.secondPortal ]
+                        [ { timeDelta = portalPair.timeDelta, portal = portalPair.firstPortal }
+                        , { timeDelta = -portalPair.timeDelta, portal = portalPair.secondPortal }
+                        ]
                     )
     in
-    Element.column
-        [ Element.padding 16, Element.spacing 8 ]
-        [ List.range 0 (w - 1)
-            |> List.map
-                (\x ->
-                    List.range 0 (h - 1)
-                        |> List.map
-                            (\y ->
-                                let
-                                    localPortals : Set TileEdge
-                                    localPortals =
-                                        List.filterMap
-                                            (\portal ->
-                                                if portal.position == ( x, y ) then
-                                                    Just portal.tileEdge
+    List.range 0 (w - 1)
+        |> List.map
+            (\x ->
+                List.range 0 (h - 1)
+                    |> List.map
+                        (\y ->
+                            let
+                                localPortals : List ( Int, TileEdge )
+                                localPortals =
+                                    List.filterMap
+                                        (\portal ->
+                                            if portal.portal.position == ( x, y ) then
+                                                Just ( portal.timeDelta, portal.portal.tileEdge )
 
-                                                else
-                                                    Nothing
-                                            )
-                                            portals
-                                            |> Set.fromList
+                                            else
+                                                Nothing
+                                        )
+                                        portals
 
-                                    a tileEdge =
-                                        if Set.member tileEdge localPortals then
-                                            6
+                                borderWidth tileEdge =
+                                    if List.any (Tuple.second >> (==) tileEdge) localPortals then
+                                        6
+
+                                    else
+                                        0
+                            in
+                            Element.el
+                                [ Element.width (Element.px 32)
+                                , Element.height (Element.px 32)
+                                , Element.Font.center
+                                , Element.Border.width 1
+                                , Element.el
+                                    [ Element.Border.widthEach
+                                        { left = borderWidth LeftEdge
+                                        , right = borderWidth RightEdge
+                                        , top = borderWidth TopEdge
+                                        , bottom = borderWidth BottomEdge
+                                        }
+                                    , Element.Border.color (Element.rgb 0.3 0.3 1)
+                                    , Element.width Element.fill
+                                    , Element.height Element.fill
+                                    ]
+                                    Element.none
+                                    |> Element.inFront
+                                , if Set.member ( x, y ) walls then
+                                    Element.Background.color (Element.rgb 0 0 0)
+
+                                  else
+                                    Element.Background.color (Element.rgb 1 1 1)
+                                ]
+                                (case List.find (\player -> player.position == ( x, y )) current.players of
+                                    Just player ->
+                                        "P" ++ String.fromInt player.age |> Element.text
+
+                                    Nothing ->
+                                        if List.any (\box -> box.position == ( x, y )) current.boxes then
+                                            Element.text "B"
 
                                         else
-                                            0
-                                in
-                                Element.el
-                                    [ Element.width (Element.px 32)
-                                    , Element.height (Element.px 32)
-                                    , Element.Font.center
-                                    , Element.Border.width 1
-                                    , Element.el
-                                        [ Element.Border.widthEach
-                                            { left = a LeftEdge
-                                            , right = a RightEdge
-                                            , top = a TopEdge
-                                            , bottom = a BottomEdge
-                                            }
-                                        , Element.Border.color (Element.rgb 0.3 0.3 1)
-                                        , Element.width Element.fill
-                                        , Element.height Element.fill
-                                        ]
-                                        Element.none
-                                        |> Element.inFront
-                                    , if Set.member ( x, y ) walls then
-                                        Element.Background.color (Element.rgb 0 0 0)
+                                            case List.head localPortals of
+                                                Just ( timeDelta, _ ) ->
+                                                    String.fromInt timeDelta |> Element.text
 
-                                      else
-                                        Element.Background.color (Element.rgb 1 1 1)
-                                    ]
-                                    (if List.any (\player -> player.position == ( x, y )) current.players then
-                                        Element.text "P"
+                                                Nothing ->
+                                                    Element.none
+                                )
+                        )
+                    |> Element.column []
+            )
+        |> Element.row []
 
-                                     else if List.any (\box -> box.position == ( x, y )) current.boxes then
-                                        Element.text "B"
 
-                                     else
-                                        Element.none
-                                    )
-                            )
-                        |> Element.column []
-                )
-            |> Element.row []
+viewLoaded : Loaded_ -> Element FrontendMsg
+viewLoaded model =
+    Element.column
+        [ Element.padding 16, Element.spacing 8 ]
+        [ viewLevel model.level model.playerActions model.currentTime
         , Element.row
             [ Element.spacing 8 ]
             [ button
