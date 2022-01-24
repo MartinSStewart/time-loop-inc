@@ -70,7 +70,7 @@ initLoaded loading =
         Ok level ->
             { navigationKey = loading.navigationKey
             , playerActions = []
-            , currentTime = 0
+            , currentTime = Nothing
             , keys = []
             , level = level
             }
@@ -118,7 +118,7 @@ updateLoaded msg model =
                             { model
                                 | playerActions =
                                     model.playerActions |> List.reverse |> List.drop 1 |> List.reverse
-                                , currentTime = model.currentTime - 1
+                                , currentTime = Nothing
                             }
 
                         _ ->
@@ -149,7 +149,7 @@ updateLoaded msg model =
                 , currentTime =
                     case action of
                         Just _ ->
-                            model_.currentTime + 1
+                            Nothing
 
                         Nothing ->
                             model_.currentTime
@@ -164,10 +164,18 @@ updateLoaded msg model =
             Debug.todo ""
 
         PressedTimeMinus ->
-            ( { model | currentTime = model.currentTime - 1 }, Cmd.none )
+            let
+                currentTime =
+                    getCurrentTime model (LevelState.timeline model.level model.playerActions)
+            in
+            ( { model | currentTime = currentTime - 1 |> Just }, Cmd.none )
 
         PressedTimePlus ->
-            ( { model | currentTime = model.currentTime + 1 }, Cmd.none )
+            let
+                currentTime =
+                    getCurrentTime model (LevelState.timeline model.level model.playerActions)
+            in
+            ( { model | currentTime = currentTime + 1 |> Just }, Cmd.none )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
@@ -201,8 +209,8 @@ view model =
     }
 
 
-viewLevel : Level -> List (Maybe MoveAction) -> Int -> Element msg
-viewLevel level playerActions currentTime =
+viewLevel : Level -> RegularDict.Dict Int LevelInstant -> Int -> Element msg
+viewLevel level timeline currentTime =
     let
         ( w, h ) =
             Level.levelSize level
@@ -210,10 +218,6 @@ viewLevel level playerActions currentTime =
         walls : Set Point
         walls =
             Level.getWalls level
-
-        timeline : RegularDict.Dict Int LevelInstant
-        timeline =
-            LevelState.timeline level playerActions
 
         latestInstant =
             RegularDict.keys timeline |> List.maximum |> Maybe.withDefault 0
@@ -308,11 +312,39 @@ viewLevel level playerActions currentTime =
         |> Element.row []
 
 
+getCurrentTime :
+    Loaded_
+    -> RegularDict.Dict Int LevelInstant
+    -> Int
+getCurrentTime model timeline =
+    case model.currentTime of
+        Just currentTime_ ->
+            currentTime_
+
+        Nothing ->
+            List.find
+                (\( _, instant ) ->
+                    List.any
+                        (\player -> player.age == List.length model.playerActions)
+                        instant.players
+                )
+                (RegularDict.toList timeline)
+                |> Maybe.map Tuple.first
+                |> Maybe.withDefault 0
+
+
 viewLoaded : Loaded_ -> Element FrontendMsg
 viewLoaded model =
+    let
+        timeline =
+            LevelState.timeline model.level model.playerActions
+
+        currentTime =
+            getCurrentTime model timeline
+    in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
-        [ viewLevel model.level model.playerActions model.currentTime
+        [ viewLevel model.level timeline currentTime
         , Element.row
             [ Element.spacing 8 ]
             [ button
@@ -320,7 +352,7 @@ viewLoaded model =
                 , Element.Background.color (Element.rgb 0.7 0.7 0.7)
                 ]
                 { onPress = PressedTimeMinus, label = Element.text "-" }
-            , Element.text ("Time: " ++ String.fromInt model.currentTime)
+            , Element.text ("Time: " ++ String.fromInt currentTime)
             , button
                 [ Element.padding 8
                 , Element.Background.color (Element.rgb 0.7 0.7 0.7)
