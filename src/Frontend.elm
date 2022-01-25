@@ -230,21 +230,6 @@ viewLevel level timeline currentTime =
         walls =
             Level.getWalls level
 
-        latestInstant =
-            RegularDict.keys timeline |> List.maximum |> Maybe.withDefault 0
-
-        earliestInstant =
-            RegularDict.keys timeline |> List.minimum |> Maybe.withDefault 0
-
-        current : LevelInstant
-        current =
-            if currentTime < earliestInstant then
-                LevelState.init currentTime level
-
-            else
-                RegularDict.get (min latestInstant currentTime) timeline
-                    |> Maybe.withDefault { players = [], boxes = [] }
-
         portals : List { timeDelta : Int, portal : Portal }
         portals =
             Level.portalPairs level
@@ -254,6 +239,9 @@ viewLevel level timeline currentTime =
                         , { timeDelta = -portalPair.timeDelta, portal = portalPair.secondPortal }
                         ]
                     )
+
+        current =
+            LevelState.getTimelineInstant level currentTime timeline
     in
     List.range 0 (w - 1)
         |> List.map

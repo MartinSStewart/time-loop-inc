@@ -1,7 +1,7 @@
 module LevelState exposing
     ( LevelInstant
     , MoveAction(..)
-    , init
+    , getTimelineInstant
     , timeline
     )
 
@@ -192,6 +192,35 @@ getBoxAt point levelInstant =
 timeline : Level -> List (Maybe MoveAction) -> RegularDict.Dict Int LevelInstant
 timeline level moveActions =
     timelineHelper level (RegularDict.singleton 0 (init 0 level)) [] 0 moveActions
+
+
+getTimelineInstant : Level -> Int -> RegularDict.Dict Int LevelInstant -> LevelInstant
+getTimelineInstant level currentTime timeline_ =
+    let
+        latestInstant =
+            RegularDict.keys timeline_ |> List.maximum |> Maybe.withDefault 0
+
+        earliestInstant =
+            RegularDict.keys timeline_ |> List.minimum |> Maybe.withDefault 0
+    in
+    if currentTime < earliestInstant then
+        init currentTime level
+
+    else if currentTime > latestInstant then
+        RegularDict.get (min latestInstant currentTime) timeline_
+            |> Maybe.withDefault { players = [], boxes = [] }
+            |> (\instant ->
+                    { instant
+                        | players =
+                            List.map
+                                (\player -> { player | age = player.age + currentTime - latestInstant })
+                                instant.players
+                    }
+               )
+
+    else
+        RegularDict.get (min latestInstant currentTime) timeline_
+            |> Maybe.withDefault { players = [], boxes = [] }
 
 
 timelineHelper :
