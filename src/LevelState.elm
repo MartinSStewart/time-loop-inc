@@ -1,14 +1,17 @@
 module LevelState exposing
-    ( LevelInstant
+    ( DoorInstant
+    , LevelInstant
     , MoveAction(..)
+    , doors
     , getTimelineInstant
+    , isCompleted
+    , paradoxes
     , timeline
     )
 
-import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Dict as RegularDict
-import Level exposing (Level, Portal, PortalPair, TileEdge(..))
+import Level exposing (Door, Level, Portal, PortalPair, TileEdge(..))
 import List.Extra as List
 import Point exposing (Point)
 
@@ -176,6 +179,78 @@ step level moveActions timeTravellers levelInstant =
                         Nothing
             )
             levelInstant.players
+    }
+
+
+isCompleted : Level -> RegularDict.Dict Int LevelInstant -> Bool
+isCompleted level timeline_ =
+    case paradoxes level timeline_ of
+        [] ->
+            RegularDict.toList timeline_
+                |> List.any
+                    (\( _, instant ) ->
+                        List.any (.position >> (==) (Level.exit level).position) instant.players
+                    )
+
+        _ ->
+            False
+
+
+paradoxes : Level -> RegularDict.Dict Int LevelInstant -> List Paradox
+paradoxes level timeline_ =
+    RegularDict.toList timeline_
+        |> List.concatMap
+            (\( time, instant ) ->
+                List.map .position instant.players
+                    ++ List.map .position instant.boxes
+                    ++ List.filterMap
+                        (\{ door, isOpen } ->
+                            if isOpen then
+                                Nothing
+
+                            else
+                                Just door.doorPosition
+                        )
+                        (doors level instant)
+                    |> List.gatherEquals
+                    |> List.filterMap
+                        (\( position, rest ) ->
+                            case rest of
+                                [] ->
+                                    Nothing
+
+                                _ ->
+                                    { time = time
+                                    , position = position
+                                    , resolvable = False
+                                    }
+                                        |> Just
+                        )
+            )
+
+
+type alias DoorInstant =
+    { door : Door
+    , isOpen : Bool
+    }
+
+
+doors : Level -> LevelInstant -> List DoorInstant
+doors level instant =
+    let
+        positions =
+            List.map .position instant.players
+                ++ List.map .position instant.boxes
+                |> Set.fromList
+    in
+    Level.doors level
+        |> List.map (\door -> { door = door, isOpen = Set.member door.buttonPosition positions })
+
+
+type alias Paradox =
+    { time : Int
+    , position : Point
+    , resolvable : Bool
     }
 
 

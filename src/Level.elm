@@ -1,4 +1,4 @@
-module Level exposing (Level, Portal, PortalPair, TileEdge(..), boxesStart, getWalls, init, isWall, levelSize, playerStart, portalPairs)
+module Level exposing (Door, Level, Portal, PortalPair, TileEdge(..), boxesStart, doors, exit, getWalls, init, isWall, levelSize, playerStart, portalPairs)
 
 import AssocSet as Set exposing (Set)
 import Point exposing (Point)
@@ -15,6 +15,13 @@ type alias Level_ =
     , exit : Exit
     , levelSize : Point
     , portalPairs : List PortalPair
+    , doors : List Door
+    }
+
+
+type alias Door =
+    { doorPosition : Point
+    , buttonPosition : Point
     }
 
 
@@ -30,6 +37,16 @@ init level =
 
     else
         Err "Failed to create level"
+
+
+exit : Level -> Exit
+exit (Level level) =
+    level.exit
+
+
+doors : Level -> List Door
+doors (Level level) =
+    level.doors
 
 
 getWalls : Level -> Set Point

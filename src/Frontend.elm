@@ -13,7 +13,7 @@ import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Level, Portal, TileEdge(..))
-import LevelState exposing (LevelInstant, MoveAction(..))
+import LevelState exposing (DoorInstant, LevelInstant, MoveAction(..))
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Point exposing (Point)
@@ -44,7 +44,7 @@ getLevel =
         , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
         , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
         , exit =
-            { position = ( 3, 1 )
+            { position = ( 3, 0 )
             , tileEdge = LeftEdge
             }
         , levelSize = ( 5, 5 )
@@ -58,11 +58,12 @@ getLevel =
               , timeDelta = 8
               }
             ]
+        , doors = [ { doorPosition = ( 2, 2 ), buttonPosition = ( 3, 3 ) } ]
         }
 
 
 init : Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
-init url navigationKey =
+init _ navigationKey =
     ( { navigationKey = navigationKey } |> initLoaded
     , Cmd.none
     )
@@ -73,7 +74,7 @@ initLoaded loading =
     case getLevel of
         Ok level ->
             { navigationKey = loading.navigationKey
-            , playerActions = []
+            , moveActions = []
             , currentTime = Nothing
             , keys = []
             , level = level
@@ -120,16 +121,22 @@ updateLoaded msg model =
                     case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
                         ( True, True ) ->
                             { model
-                                | playerActions =
-                                    model.playerActions |> List.reverse |> List.drop 1 |> List.reverse
+                                | moveActions =
+                                    model.moveActions |> List.reverse |> List.drop 1 |> List.reverse
                                 , currentTime = Nothing
                             }
 
                         _ ->
                             model
 
+                timeline =
+                    LevelState.timeline model.level model.moveActions
+
                 action =
-                    if keyPressed Keyboard.ArrowLeft then
+                    if LevelState.isCompleted model.level timeline then
+                        Nothing
+
+                    else if keyPressed Keyboard.ArrowLeft then
                         Just (Just MoveLeft)
 
                     else if keyPressed Keyboard.ArrowRight then
@@ -149,7 +156,7 @@ updateLoaded msg model =
             in
             ( { model_
                 | keys = newKeys
-                , playerActions = model_.playerActions ++ Maybe.toList action
+                , moveActions = model_.moveActions ++ Maybe.toList action
                 , currentTime =
                     case action of
                         Just _ ->
@@ -177,14 +184,14 @@ updateLoaded msg model =
         PressedTimeMinus ->
             let
                 currentTime =
-                    getCurrentTime model (LevelState.timeline model.level model.playerActions)
+                    getCurrentTime model (LevelState.timeline model.level model.moveActions)
             in
             ( { model | currentTime = currentTime - 1 |> Just }, Cmd.none )
 
         PressedTimePlus ->
             let
                 currentTime =
-                    getCurrentTime model (LevelState.timeline model.level model.playerActions)
+                    getCurrentTime model (LevelState.timeline model.level model.moveActions)
             in
             ( { model | currentTime = currentTime + 1 |> Just }, Cmd.none )
 
@@ -242,6 +249,10 @@ viewLevel level timeline currentTime =
 
         current =
             LevelState.getTimelineInstant level currentTime timeline
+
+        doors : List DoorInstant
+        doors =
+            LevelState.doors level current
     in
     List.range 0 (w - 1)
         |> List.map
@@ -291,7 +302,16 @@ viewLevel level timeline currentTime =
                                     Element.Background.color (Element.rgb 0 0 0)
 
                                   else
-                                    Element.Background.color (Element.rgb 1 1 1)
+                                    case List.find (\{ door } -> door.doorPosition == ( x, y )) doors of
+                                        Just { isOpen } ->
+                                            if isOpen then
+                                                Element.Background.color (Element.rgb 0.8 0.8 0.8)
+
+                                            else
+                                                Element.Background.color (Element.rgb 0.4 0.4 0.4)
+
+                                        Nothing ->
+                                            Element.Background.color (Element.rgb 1 1 1)
                                 ]
                                 (case List.find (\player -> player.position == ( x, y )) current.players of
                                     Just player ->
@@ -324,7 +344,24 @@ viewLevel level timeline currentTime =
                                                             ]
 
                                                 Nothing ->
-                                                    Element.none
+                                                    if Level.exit level |> .position |> (==) (Point.new x y) then
+                                                        Element.el
+                                                            [ Element.centerX
+                                                            , Element.centerY
+                                                            , Element.Font.size 14
+                                                            ]
+                                                            (Element.text "Exit")
+
+                                                    else if Level.doors level |> List.any (.buttonPosition >> (==) (Point.new x y)) then
+                                                        Element.el
+                                                            [ Element.centerX
+                                                            , Element.centerY
+                                                            , Element.Font.size 14
+                                                            ]
+                                                            (Element.text "B")
+
+                                                    else
+                                                        Element.none
                                 )
                         )
                     |> Element.column []
@@ -345,7 +382,7 @@ getCurrentTime model timeline =
             List.find
                 (\( _, instant ) ->
                     List.any
-                        (\player -> player.age == List.length model.playerActions)
+                        (\player -> player.age == List.length model.moveActions)
                         instant.players
                 )
                 (RegularDict.toList timeline)
@@ -357,7 +394,7 @@ viewLoaded : Loaded_ -> Element FrontendMsg
 viewLoaded model =
     let
         timeline =
-            LevelState.timeline model.level model.playerActions
+            LevelState.timeline model.level model.moveActions
 
         currentTime =
             getCurrentTime model timeline
@@ -379,6 +416,11 @@ viewLoaded model =
                 ]
                 { onPress = PressedTimePlus, label = Element.text "+" }
             ]
+        , if LevelState.isCompleted model.level timeline then
+            Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
+
+          else
+            Element.none
         ]
 
 
