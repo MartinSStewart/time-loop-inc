@@ -53,6 +53,10 @@ getLevel =
               , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
               , timeDelta = 2
               }
+            , { firstPortal = { position = ( 0, 4 ), tileEdge = LeftEdge }
+              , secondPortal = { position = ( 4, 1 ), tileEdge = RightEdge }
+              , timeDelta = 8
+              }
             ]
         }
 
@@ -234,8 +238,12 @@ viewLevel level timeline currentTime =
 
         current : LevelInstant
         current =
-            RegularDict.get (clamp earliestInstant latestInstant currentTime) timeline
-                |> Maybe.withDefault { players = [], boxes = [] }
+            if currentTime < earliestInstant then
+                LevelState.init currentTime level
+
+            else
+                RegularDict.get (min latestInstant currentTime) timeline
+                    |> Maybe.withDefault { players = [], boxes = [] }
 
         portals : List { timeDelta : Int, portal : Portal }
         portals =

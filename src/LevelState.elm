@@ -1,6 +1,7 @@
 module LevelState exposing
     ( LevelInstant
     , MoveAction(..)
+    , init
     , timeline
     )
 
