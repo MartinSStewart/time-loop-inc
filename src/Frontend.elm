@@ -477,6 +477,18 @@ viewLoaded model =
         , Element.column
             []
             [ Element.paragraph [] [ Element.text "Undo moves with ctrl+z" ] ]
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "B = button that opens door" ] ]
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "t-n = A portal that moves you n seconds into the past" ] ]
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "t+n = A portal moves you back n seconds into the future" ] ]
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "You can only use the exit when there are no paradoxes" ] ]
         ]
 
 
