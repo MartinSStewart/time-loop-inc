@@ -486,18 +486,28 @@ viewLoaded model =
         [ Element.padding 16, Element.spacing 8 ]
         [ viewLevel model.level timeline currentTime
         , Element.row
-            [ Element.spacing 8 ]
-            [ button
-                [ Element.padding 8
-                , Element.Background.color (Element.rgb 0.7 0.7 0.7)
+            [ Element.spacing 64 ]
+            [ Element.row [ Element.spacing 8, Element.width (Element.px 196) ]
+                [ button
+                    [ Element.padding 8
+                    , Element.Background.color (Element.rgb 0.7 0.7 0.7)
+                    , Element.width (Element.px 30)
+                    , Element.Font.center
+                    ]
+                    { onPress = PressedTimeMinus, label = Element.text "-" }
+                , Element.text ("Viewing t = " ++ String.fromInt currentTime)
+                , button
+                    [ Element.padding 8
+                    , Element.Background.color (Element.rgb 0.7 0.7 0.7)
+                    , Element.alignRight
+                    , Element.width (Element.px 30)
+                    , Element.Font.center
+                    ]
+                    { onPress = PressedTimePlus, label = Element.text "+" }
                 ]
-                { onPress = PressedTimeMinus, label = Element.text "-" }
-            , Element.text ("Time: " ++ String.fromInt currentTime)
-            , button
-                [ Element.padding 8
-                , Element.Background.color (Element.rgb 0.7 0.7 0.7)
-                ]
-                { onPress = PressedTimePlus, label = Element.text "+" }
+            , "You are at t = "
+                ++ String.fromInt (LevelState.currentPlayerTime timeline model.moveActions)
+                |> Element.text
             ]
         , if LevelState.isCompleted model.level timeline model.moveActions then
             Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
@@ -511,7 +521,7 @@ viewLoaded model =
                 |> Element.el [ Element.Font.color (Element.rgb 1 0 0) ]
         , Element.column
             []
-            [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys." ] ]
+            [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys. Press space to wait 1 turn." ] ]
         , Element.column
             []
             [ Element.paragraph [] [ Element.text "Undo moves with ctrl+z" ] ]
