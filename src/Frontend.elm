@@ -571,7 +571,7 @@ viewLoaded model =
             [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys or WASD. Press space to wait 1 turn." ] ]
         , Element.column
             []
-            [ Element.paragraph [] [ Element.text "Q increments view time and E decrements view time." ] ]
+            [ Element.paragraph [] [ Element.text "E increments view time and Q decrements view time." ] ]
         , Element.column
             []
             [ Element.paragraph [] [ Element.text "Undo moves with ctrl+z" ] ]
