@@ -148,23 +148,33 @@ updateLoaded msg model =
                         _ ->
                             model
 
+                maybeTimeAdjust =
+                    if keyPressed (Keyboard.Character "Q") then
+                        Just -1
+
+                    else if keyPressed (Keyboard.Character "E") then
+                        Just 1
+
+                    else
+                        Nothing
+
                 timeline =
                     LevelState.timeline model.level model.moveActions
 
-                action =
+                maybeMoveAction =
                     if LevelState.isCompleted model.level timeline model.moveActions then
                         Nothing
 
-                    else if keyPressed Keyboard.ArrowLeft then
+                    else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
                         Just (Just MoveLeft)
 
-                    else if keyPressed Keyboard.ArrowRight then
+                    else if keyPressed Keyboard.ArrowRight || keyPressed (Keyboard.Character "D") then
                         Just (Just MoveRight)
 
-                    else if keyPressed Keyboard.ArrowUp then
+                    else if keyPressed Keyboard.ArrowUp || keyPressed (Keyboard.Character "W") then
                         Just (Just MoveUp)
 
-                    else if keyPressed Keyboard.ArrowDown then
+                    else if keyPressed Keyboard.ArrowDown || keyPressed (Keyboard.Character "S") then
                         Just (Just MoveDown)
 
                     else if keyPressed Keyboard.Spacebar then
@@ -173,8 +183,8 @@ updateLoaded msg model =
                     else
                         Nothing
 
-                action2 =
-                    case action of
+                maybeMoveAction2 =
+                    case maybeMoveAction of
                         Just action_ ->
                             if LevelState.canMakeMove model.level timeline model.moveActions action_ then
                                 Just action_
@@ -187,14 +197,22 @@ updateLoaded msg model =
             in
             ( { model_
                 | keys = newKeys
-                , moveActions = model_.moveActions ++ Maybe.toList action2
+                , moveActions = model_.moveActions ++ Maybe.toList maybeMoveAction2
                 , currentTime =
-                    case action2 of
+                    case maybeMoveAction2 of
                         Just _ ->
                             Nothing
 
                         Nothing ->
-                            model_.currentTime
+                            case ( maybeTimeAdjust, model_.currentTime ) of
+                                ( Just timeAdjust, Just currentTime ) ->
+                                    currentTime + timeAdjust |> Just
+
+                                ( Just timeAdjust, Nothing ) ->
+                                    LevelState.currentPlayerTime timeline model.moveActions + timeAdjust |> Just
+
+                                ( Nothing, _ ) ->
+                                    model_.currentTime
               }
             , Cmd.none
             )
@@ -550,7 +568,10 @@ viewLoaded model =
                 |> Element.el [ Element.Font.color (Element.rgb 1 0 0) ]
         , Element.column
             []
-            [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys. Press space to wait 1 turn." ] ]
+            [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys or WASD. Press space to wait 1 turn." ] ]
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "Q increments view time and E decrements view time." ] ]
         , Element.column
             []
             [ Element.paragraph [] [ Element.text "Undo moves with ctrl+z" ] ]
