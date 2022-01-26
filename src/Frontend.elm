@@ -331,6 +331,14 @@ viewLevel level timeline currentTime =
                                 tileParadoxes : List Paradox
                                 tileParadoxes =
                                     List.filter (.position >> (==) position) paradoxes
+
+                                maybeDoor =
+                                    case List.find (\{ door } -> door.doorPosition == position) doors of
+                                        Just { isOpen } ->
+                                            Just isOpen
+
+                                        Nothing ->
+                                            Nothing
                             in
                             Element.el
                                 [ Element.width (Element.px 50)
@@ -347,7 +355,7 @@ viewLevel level timeline currentTime =
                                             1
 
                                            else
-                                            0.3
+                                            0.4
                                           )
                                             |> Element.alpha
                                         , Element.Font.bold
@@ -385,13 +393,12 @@ viewLevel level timeline currentTime =
                                     Element.Background.color (Element.rgb 0 0 0)
 
                                   else
-                                    case List.find (\{ door } -> door.doorPosition == position) doors of
-                                        Just { isOpen } ->
-                                            if isOpen then
-                                                Element.Background.color (Element.rgb 0.8 0.8 0.8)
+                                    case maybeDoor of
+                                        Just True ->
+                                            Element.Background.color (Element.rgb 0.8 0.8 0.8)
 
-                                            else
-                                                Element.Background.color (Element.rgb 0.4 0.4 0.4)
+                                        Just False ->
+                                            Element.Background.color (Element.rgb 0.4 0.4 0.4)
 
                                         Nothing ->
                                             Element.Background.color (Element.rgb 1 1 1)
@@ -400,6 +407,28 @@ viewLevel level timeline currentTime =
                                     [] ->
                                         if List.any (\box -> box.position == position) current.boxes then
                                             Element.el [ Element.centerX, Element.centerY ] (Element.text "▨")
+
+                                        else if maybeDoor == Just True then
+                                            Element.column
+                                                [ Element.Font.size 14
+                                                , Element.centerY
+                                                , Element.Font.center
+                                                , Element.width Element.fill
+                                                ]
+                                                [ Element.el [ Element.centerX ] (Element.text "Open")
+                                                , Element.el [ Element.centerX ] (Element.text "door")
+                                                ]
+
+                                        else if maybeDoor == Just False then
+                                            Element.column
+                                                [ Element.Font.size 14
+                                                , Element.centerY
+                                                , Element.width Element.fill
+                                                , Element.Font.color (Element.rgb 0.8 0.8 0.8)
+                                                ]
+                                                [ Element.el [ Element.centerX ] (Element.text "Closed")
+                                                , Element.el [ Element.centerX ] (Element.text "door")
+                                                ]
 
                                         else
                                             case List.head localPortals of
