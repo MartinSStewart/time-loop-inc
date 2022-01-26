@@ -13,7 +13,7 @@ import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Level, Portal, TileEdge(..))
-import LevelState exposing (DoorInstant, LevelInstant, MoveAction(..))
+import LevelState exposing (DoorInstant, LevelInstant, MoveAction(..), Paradox)
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Point exposing (Point)
@@ -35,30 +35,49 @@ app =
 
 
 ---- MODEL ----
+--getLevel : Result String Level
+--getLevel =
+--    Level.init
+--        { playerStart = ( 1, 1 )
+--        , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
+--        , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
+--        , exit =
+--            { position = ( 3, 0 )
+--            , tileEdge = TopEdge
+--            }
+--        , levelSize = ( 5, 5 )
+--        , portalPairs =
+--            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+--              , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
+--              , timeDelta = 2
+--              }
+--            , { firstPortal = { position = ( 0, 4 ), tileEdge = LeftEdge }
+--              , secondPortal = { position = ( 4, 1 ), tileEdge = RightEdge }
+--              , timeDelta = 8
+--              }
+--            ]
+--        , doors = [ { doorPosition = ( 2, 2 ), buttonPosition = ( 2, 3 ) } ]
+--        }
 
 
-getLevel : Result String Level
-getLevel =
+level0 : Result String Level
+level0 =
     Level.init
-        { playerStart = ( 1, 1 )
-        , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
-        , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
+        { playerStart = ( 1, 2 )
+        , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
+        , boxesStart = [] |> Set.fromList
         , exit =
-            { position = ( 3, 0 )
-            , tileEdge = LeftEdge
+            { position = ( 7, 0 )
+            , tileEdge = TopEdge
             }
-        , levelSize = ( 5, 5 )
+        , levelSize = ( 8, 5 )
         , portalPairs =
-            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
-              , timeDelta = 2
-              }
-            , { firstPortal = { position = ( 0, 4 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 4, 1 ), tileEdge = RightEdge }
+            [ { firstPortal = { position = ( 5, 0 ), tileEdge = TopEdge }
+              , secondPortal = { position = ( 5, 4 ), tileEdge = BottomEdge }
               , timeDelta = 8
               }
             ]
-        , doors = [ { doorPosition = ( 2, 2 ), buttonPosition = ( 3, 3 ) } ]
+        , doors = [ { doorPosition = ( 3, 2 ), buttonPosition = ( 6, 2 ) } ]
         }
 
 
@@ -71,7 +90,7 @@ init _ navigationKey =
 
 initLoaded : Loading_ -> FrontendModel
 initLoaded loading =
-    case getLevel of
+    case level0 of
         Ok level ->
             { navigationKey = loading.navigationKey
             , moveActions = []
@@ -133,7 +152,7 @@ updateLoaded msg model =
                     LevelState.timeline model.level model.moveActions
 
                 action =
-                    if LevelState.isCompleted model.level timeline then
+                    if LevelState.isCompleted model.level timeline model.moveActions then
                         Nothing
 
                     else if keyPressed Keyboard.ArrowLeft then
@@ -153,12 +172,24 @@ updateLoaded msg model =
 
                     else
                         Nothing
+
+                action2 =
+                    case action of
+                        Just action_ ->
+                            if LevelState.canMakeMove model.level timeline model.moveActions action_ then
+                                Just action_
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
             in
             ( { model_
                 | keys = newKeys
-                , moveActions = model_.moveActions ++ Maybe.toList action
+                , moveActions = model_.moveActions ++ Maybe.toList action2
                 , currentTime =
-                    case action of
+                    case action2 of
                         Just _ ->
                             Nothing
 
@@ -247,12 +278,20 @@ viewLevel level timeline currentTime =
                         ]
                     )
 
+        hasParadoxes : Bool
+        hasParadoxes =
+            LevelState.hasParadoxes level timeline
+
+        current : LevelInstant
         current =
             LevelState.getTimelineInstant level currentTime timeline
 
         doors : List DoorInstant
         doors =
             LevelState.doors level current
+
+        exit =
+            Level.exit level
     in
     List.range 0 (w - 1)
         |> List.map
@@ -261,11 +300,15 @@ viewLevel level timeline currentTime =
                     |> List.map
                         (\y ->
                             let
+                                position : Point
+                                position =
+                                    Point.new x y
+
                                 localPortals : List ( Int, TileEdge )
                                 localPortals =
                                     List.filterMap
                                         (\portal ->
-                                            if portal.portal.position == ( x, y ) then
+                                            if portal.portal.position == position then
                                                 Just ( portal.timeDelta, portal.portal.tileEdge )
 
                                             else
@@ -273,8 +316,13 @@ viewLevel level timeline currentTime =
                                         )
                                         portals
 
+                                borderWidth : TileEdge -> Int
                                 borderWidth tileEdge =
-                                    if List.any (Tuple.second >> (==) tileEdge) localPortals then
+                                    if
+                                        List.any (Tuple.second >> (==) tileEdge) localPortals
+                                            || (exit.position == position)
+                                            && (exit.tileEdge == tileEdge)
+                                    then
                                         6
 
                                     else
@@ -292,17 +340,27 @@ viewLevel level timeline currentTime =
                                         , top = borderWidth TopEdge
                                         , bottom = borderWidth BottomEdge
                                         }
-                                    , Element.Border.color (Element.rgb 0.3 0.3 1)
+                                    , Element.Border.color
+                                        (if exit.position == position then
+                                            if hasParadoxes then
+                                                Element.rgb 0.8 0 0
+
+                                            else
+                                                Element.rgb 0 0.8 0
+
+                                         else
+                                            Element.rgb 0.3 0.3 1
+                                        )
                                     , Element.width Element.fill
                                     , Element.height Element.fill
                                     ]
                                     Element.none
                                     |> Element.inFront
-                                , if Set.member ( x, y ) walls then
+                                , if Set.member position walls then
                                     Element.Background.color (Element.rgb 0 0 0)
 
                                   else
-                                    case List.find (\{ door } -> door.doorPosition == ( x, y )) doors of
+                                    case List.find (\{ door } -> door.doorPosition == position) doors of
                                         Just { isOpen } ->
                                             if isOpen then
                                                 Element.Background.color (Element.rgb 0.8 0.8 0.8)
@@ -313,7 +371,7 @@ viewLevel level timeline currentTime =
                                         Nothing ->
                                             Element.Background.color (Element.rgb 1 1 1)
                                 ]
-                                (case List.find (\player -> player.position == ( x, y )) current.players of
+                                (case List.find (\player -> player.position == position) current.players of
                                     Just player ->
                                         Element.row
                                             [ Element.centerX, Element.centerY ]
@@ -324,7 +382,7 @@ viewLevel level timeline currentTime =
                                             ]
 
                                     Nothing ->
-                                        if List.any (\box -> box.position == ( x, y )) current.boxes then
+                                        if List.any (\box -> box.position == position) current.boxes then
                                             Element.el [ Element.centerX, Element.centerY ] (Element.text "▨")
 
                                         else
@@ -379,15 +437,7 @@ getCurrentTime model timeline =
             currentTime_
 
         Nothing ->
-            List.find
-                (\( _, instant ) ->
-                    List.any
-                        (\player -> player.age == List.length model.moveActions)
-                        instant.players
-                )
-                (RegularDict.toList timeline)
-                |> Maybe.map Tuple.first
-                |> Maybe.withDefault 0
+            LevelState.currentPlayerTime timeline model.moveActions
 
 
 viewLoaded : Loaded_ -> Element FrontendMsg
@@ -416,11 +466,17 @@ viewLoaded model =
                 ]
                 { onPress = PressedTimePlus, label = Element.text "+" }
             ]
-        , if LevelState.isCompleted model.level timeline then
+        , if LevelState.isCompleted model.level timeline model.moveActions then
             Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
 
           else
             Element.none
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys." ] ]
+        , Element.column
+            []
+            [ Element.paragraph [] [ Element.text "Undo moves with ctrl+z" ] ]
         ]
 
 

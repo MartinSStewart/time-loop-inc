@@ -2,8 +2,12 @@ module LevelState exposing
     ( DoorInstant
     , LevelInstant
     , MoveAction(..)
+    , Paradox
+    , canMakeMove
+    , currentPlayerTime
     , doors
     , getTimelineInstant
+    , hasParadoxes
     , isCompleted
     , paradoxes
     , timeline
@@ -182,18 +186,105 @@ step level moveActions timeTravellers levelInstant =
     }
 
 
-isCompleted : Level -> RegularDict.Dict Int LevelInstant -> Bool
-isCompleted level timeline_ =
+isCompleted : Level -> RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Bool
+isCompleted level timeline_ moveActions =
     case paradoxes level timeline_ of
         [] ->
-            RegularDict.toList timeline_
-                |> List.any
-                    (\( _, instant ) ->
-                        List.any (.position >> (==) (Level.exit level).position) instant.players
-                    )
+            let
+                currentTime =
+                    currentPlayerTime timeline_ moveActions
+
+                currentPlayer =
+                    getTimelineInstant level currentTime timeline_
+                        |> .players
+                        |> List.find (\player -> player.age == List.length moveActions)
+
+                exit =
+                    Level.exit level
+            in
+            case currentPlayer of
+                Just currentPlayer_ ->
+                    currentPlayer_.position == exit.position
+
+                Nothing ->
+                    False
 
         _ ->
             False
+
+
+
+--case paradoxes level timeline_ of
+--    [] ->
+--        let
+--            currentTime =
+--                currentPlayerTime timeline_ moveActions
+--
+--            currentPlayer =
+--                getTimelineInstant level currentTime timeline_
+--                    |> .players
+--                    |> List.find (\player -> player.age == List.length moveActions)
+--
+--            exit =
+--                Level.exit level
+--        in
+--        case currentPlayer of
+--            Just player ->
+--                (player.position == exit.position)
+--                    && movesIntoTileEdge nextMove exit.tileEdge
+--                    && hasParadoxes level timeline_
+--                    |> not
+--
+--            Nothing ->
+--                Debug.todo "This shouldn't happen"
+--
+--
+--    _ ->
+--        False
+
+
+hasParadoxes : Level -> RegularDict.Dict Int LevelInstant -> Bool
+hasParadoxes level timeline_ =
+    paradoxes level timeline_ |> List.isEmpty |> not
+
+
+canMakeMove : Level -> RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Maybe MoveAction -> Bool
+canMakeMove level timeline_ moveActions nextMove =
+    let
+        currentTime : Int
+        currentTime =
+            currentPlayerTime timeline_ moveActions
+
+        currentPlayer =
+            getTimelineInstant level currentTime timeline_
+                |> .players
+                |> List.find (\player -> player.age == List.length moveActions)
+
+        exit =
+            Level.exit level
+    in
+    case currentPlayer of
+        Just player ->
+            (player.position == exit.position)
+                && movesIntoTileEdge nextMove exit.tileEdge
+                && hasParadoxes level timeline_
+                |> not
+
+        Nothing ->
+            Debug.todo "This shouldn't happen"
+
+
+currentPlayerTime : RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Int
+currentPlayerTime timeline_ moveActions =
+    List.find
+        (\( _, instant ) ->
+            List.any
+                (\player -> player.age == List.length moveActions)
+                instant.players
+        )
+        (RegularDict.toList timeline_)
+        |> Maybe.map Tuple.first
+        |> Maybe.withDefault 0
 
 
 paradoxes : Level -> RegularDict.Dict Int LevelInstant -> List Paradox
@@ -456,21 +547,26 @@ actionOffset action =
 entersPortal : Point -> Maybe MoveAction -> Portal -> Bool
 entersPortal position moveAction portal =
     if position == portal.position then
-        case ( moveAction, portal.tileEdge ) of
-            ( Just MoveUp, TopEdge ) ->
-                True
-
-            ( Just MoveLeft, LeftEdge ) ->
-                True
-
-            ( Just MoveRight, RightEdge ) ->
-                True
-
-            ( Just MoveDown, BottomEdge ) ->
-                True
-
-            _ ->
-                False
+        movesIntoTileEdge moveAction portal.tileEdge
 
     else
         False
+
+
+movesIntoTileEdge : Maybe MoveAction -> TileEdge -> Bool
+movesIntoTileEdge moveAction tileEdge =
+    case ( moveAction, tileEdge ) of
+        ( Just MoveUp, TopEdge ) ->
+            True
+
+        ( Just MoveLeft, LeftEdge ) ->
+            True
+
+        ( Just MoveRight, RightEdge ) ->
+            True
+
+        ( Just MoveDown, BottomEdge ) ->
+            True
+
+        _ ->
+            False
