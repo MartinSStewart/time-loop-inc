@@ -271,7 +271,8 @@ canMakeMove level timeline_ moveActions nextMove =
                 |> not
 
         Nothing ->
-            Debug.todo "This shouldn't happen"
+            --Debug.todo "This shouldn't happen"
+            True
 
 
 currentPlayerTime : RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Int

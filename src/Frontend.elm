@@ -479,8 +479,8 @@ viewLoaded model =
         paradoxes =
             LevelState.paradoxes model.level timeline
 
-        _ =
-            Debug.log "" model.moveActions
+        --_ =
+        --    Debug.log "" model.moveActions
     in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
