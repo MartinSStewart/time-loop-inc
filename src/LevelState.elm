@@ -357,7 +357,7 @@ getBoxAt point levelInstant =
 
 timeline : Level -> List (Maybe MoveAction) -> RegularDict.Dict Int LevelInstant
 timeline level moveActions =
-    timelineHelper level (RegularDict.singleton 0 (init 0 level)) [] 0 moveActions
+    timelineHelper level (RegularDict.singleton 0 (init 0 level)) Set.empty 0 moveActions
 
 
 getTimelineInstant : Level -> Int -> RegularDict.Dict Int LevelInstant -> LevelInstant
@@ -392,7 +392,7 @@ getTimelineInstant level currentTime timeline_ =
 timelineHelper :
     Level
     -> RegularDict.Dict Int LevelInstant
-    -> List { appearTime : Int, player : PlayerInstant }
+    -> Set { appearTime : Int, player : PlayerInstant }
     -> Int
     -> List (Maybe MoveAction)
     -> RegularDict.Dict Int LevelInstant
@@ -414,13 +414,18 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                                 else
                                     Nothing
                             )
-                            futurePlayers
+                            (Set.toList futurePlayers)
                         )
                         currentInstant
 
                 Nothing ->
                     --Debug.todo "Failed to get instant"
                     { nextInstant = { boxes = [], players = [] }, playerTimeTravel = [] }
+
+        nextFuturePlayers =
+            futurePlayers
+
+        --List.filter (\{ appearTime } -> appearTime >= currentTime) futurePlayers
     in
     case playerTimeTravel of
         ( timeDelta, player ) :: _ ->
@@ -432,7 +437,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    ({ appearTime = newTime, player = player } :: futurePlayers)
+                    (Set.insert { appearTime = newTime, player = player } nextFuturePlayers)
                     (currentTime + 1)
                     moveActions
 
@@ -447,7 +452,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                             timelineHelper
                                 level
                                 (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                                futurePlayers
+                                nextFuturePlayers
                                 (currentTime + 1)
                                 moveActions
 
@@ -463,7 +468,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                                     { timeTravelInstant | players = player :: timeTravelInstant.players }
                                     timeline_
                                 )
-                                futurePlayers
+                                nextFuturePlayers
                                 newTime
                                 moveActions
 
@@ -481,7 +486,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                                 { timeTravelInstant | players = player :: timeTravelInstant.players }
                                 timeline_
                             )
-                            futurePlayers
+                            nextFuturePlayers
                             newTime
                             moveActions
 
@@ -493,7 +498,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    futurePlayers
+                    nextFuturePlayers
                     (currentTime + 1)
                     moveActions
 

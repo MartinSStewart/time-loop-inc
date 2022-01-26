@@ -278,9 +278,9 @@ viewLevel level timeline currentTime =
                         ]
                     )
 
-        hasParadoxes : Bool
-        hasParadoxes =
-            LevelState.hasParadoxes level timeline
+        paradoxes : List Paradox
+        paradoxes =
+            LevelState.paradoxes level timeline
 
         current : LevelInstant
         current =
@@ -327,12 +327,37 @@ viewLevel level timeline currentTime =
 
                                     else
                                         0
+
+                                tileParadoxes : List Paradox
+                                tileParadoxes =
+                                    List.filter (.position >> (==) position) paradoxes
                             in
                             Element.el
-                                [ Element.width (Element.px 32)
-                                , Element.height (Element.px 32)
+                                [ Element.width (Element.px 50)
+                                , Element.height (Element.px 50)
                                 , Element.Font.center
                                 , Element.Border.width 1
+                                , (if List.isEmpty tileParadoxes then
+                                    Element.none
+
+                                   else
+                                    Element.el
+                                        [ Element.Font.size 14
+                                        , (if List.any (.time >> (==) currentTime) tileParadoxes then
+                                            1
+
+                                           else
+                                            0.3
+                                          )
+                                            |> Element.alpha
+                                        , Element.Font.bold
+                                        , Element.alignTop
+                                        , Element.alignRight
+                                        , Element.Font.color (Element.rgb 0.8 0 0)
+                                        ]
+                                        (Element.text "⚠")
+                                  )
+                                    |> Element.inFront
                                 , Element.el
                                     [ Element.Border.widthEach
                                         { left = borderWidth LeftEdge
@@ -342,11 +367,11 @@ viewLevel level timeline currentTime =
                                         }
                                     , Element.Border.color
                                         (if exit.position == position then
-                                            if hasParadoxes then
-                                                Element.rgb 0.8 0 0
+                                            if List.isEmpty paradoxes then
+                                                Element.rgb 0 0.8 0
 
                                             else
-                                                Element.rgb 0 0.8 0
+                                                Element.rgb 0.8 0 0
 
                                          else
                                             Element.rgb 0.3 0.3 1
@@ -371,17 +396,8 @@ viewLevel level timeline currentTime =
                                         Nothing ->
                                             Element.Background.color (Element.rgb 1 1 1)
                                 ]
-                                (case List.find (\player -> player.position == position) current.players of
-                                    Just player ->
-                                        Element.row
-                                            [ Element.centerX, Element.centerY ]
-                                            [ Element.text "P"
-                                            , String.fromInt player.age
-                                                |> Element.text
-                                                |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
-                                            ]
-
-                                    Nothing ->
+                                (case List.filter (\player -> player.position == position) current.players of
+                                    [] ->
                                         if List.any (\box -> box.position == position) current.boxes then
                                             Element.el [ Element.centerX, Element.centerY ] (Element.text "▨")
 
@@ -420,6 +436,16 @@ viewLevel level timeline currentTime =
 
                                                     else
                                                         Element.none
+
+                                    players ->
+                                        Element.row
+                                            [ Element.centerX, Element.centerY ]
+                                            [ Element.text "P"
+                                            , List.map (.age >> String.fromInt) players
+                                                |> String.join "&"
+                                                |> Element.text
+                                                |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
+                                            ]
                                 )
                         )
                     |> Element.column []
@@ -448,6 +474,13 @@ viewLoaded model =
 
         currentTime =
             getCurrentTime model timeline
+
+        paradoxes : List Paradox
+        paradoxes =
+            LevelState.paradoxes model.level timeline
+
+        _ =
+            Debug.log "" model.moveActions
     in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
@@ -469,8 +502,13 @@ viewLoaded model =
         , if LevelState.isCompleted model.level timeline model.moveActions then
             Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
 
-          else
+          else if List.isEmpty paradoxes then
             Element.none
+
+          else
+            ("Paradox at t=" ++ String.join "&" (List.map (.time >> String.fromInt) paradoxes))
+                |> Element.text
+                |> Element.el [ Element.Font.color (Element.rgb 1 0 0) ]
         , Element.column
             []
             [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys." ] ]

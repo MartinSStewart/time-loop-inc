@@ -170,6 +170,7 @@ level0 =
               , timeDelta = 2
               }
             ]
+        , doors = []
         }
         |> unwrapResult
 
@@ -191,6 +192,7 @@ level1 =
               , timeDelta = 2
               }
             ]
+        , doors = []
         }
         |> unwrapResult
 
@@ -212,8 +214,35 @@ level2 =
               , timeDelta = 2
               }
             ]
+        , doors = []
         }
         |> unwrapResult
+
+
+level3Actions : List (Maybe MoveAction)
+level3Actions =
+    [ Just MoveRight, Just MoveRight, Just MoveRight, Just MoveRight, Just MoveUp, Just MoveUp, Just MoveUp, Just MoveUp, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Nothing, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveRight, Just MoveUp, Just MoveUp ]
+
+
+level3 : Result String Level
+level3 =
+    Level.init
+        { playerStart = ( 1, 2 )
+        , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
+        , boxesStart = [] |> Set.fromList
+        , exit =
+            { position = ( 7, 0 )
+            , tileEdge = TopEdge
+            }
+        , levelSize = ( 8, 5 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 5, 0 ), tileEdge = TopEdge }
+              , secondPortal = { position = ( 5, 4 ), tileEdge = BottomEdge }
+              , timeDelta = 8
+              }
+            ]
+        , doors = [ { doorPosition = ( 3, 2 ), buttonPosition = ( 6, 2 ) } ]
+        }
 
 
 unwrapResult result =
