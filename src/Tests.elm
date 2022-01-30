@@ -15,6 +15,7 @@ main =
     List.map
         viewTestResult
         [ test "Can push box" test0
+        , test "Can push box back in time" test3
         , test "Go through portal and backwards in time" test1
         , test "Go through portal and forwards in time" test2
         ]
@@ -79,7 +80,33 @@ test0 =
      else
         Failed
     )
-        (actualAndExpected output expected)
+        (actualAndExpected level0 output expected)
+
+
+test3 : TestResult
+test3 =
+    let
+        moveActions =
+            [ Just MoveRight, Just MoveRight ]
+
+        output =
+            LevelState.timeline level3 moveActions |> Debug.log ""
+
+        expected =
+            [ ( -1, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = -1, position = ( 1, 1 ) } ] } )
+            , ( 0, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
+            , ( 1, { boxes = [ { position = ( 0, 2 ) }, { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
+            , ( 2, { boxes = [ { position = ( 0, 2 ) } ], players = [ { age = 2, position = ( 3, 1 ) } ] } )
+            ]
+                |> RegularDict.fromList
+    in
+    (if output == expected then
+        Passed
+
+     else
+        Failed
+    )
+        (actualAndExpected level3 output expected)
 
 
 test1 : TestResult
@@ -105,16 +132,16 @@ test1 =
      else
         Failed
     )
-        (actualAndExpected output expected)
+        (actualAndExpected level1 output expected)
 
 
-actualAndExpected actual expected =
+actualAndExpected level actual expected =
     Element.column
         [ Element.spacing 4 ]
         [ Element.el [ Element.Font.size 14 ] (Element.text "Actual:")
-        , showInstants actual
+        , showInstants level actual
         , Element.el [ Element.Font.size 14 ] (Element.text "Expected:")
-        , showInstants expected
+        , showInstants level expected
         ]
 
 
@@ -125,7 +152,7 @@ test2 =
             [ Just MoveLeft, Just MoveLeft, Just MoveLeft ]
 
         output =
-            LevelState.timeline level2 moveActions |> Debug.log ""
+            LevelState.timeline level2 moveActions
 
         expected =
             [ ( 0, { boxes = [], players = [ { age = 0, position = ( 1, 2 ) } ] } )
@@ -142,14 +169,14 @@ test2 =
      else
         Failed
     )
-        (actualAndExpected output expected)
+        (actualAndExpected level2 output expected)
 
 
-showInstants : RegularDict.Dict Int LevelInstant -> Element msg
-showInstants dict =
+showInstants : Level -> RegularDict.Dict Int LevelInstant -> Element msg
+showInstants level dict =
     RegularDict.keys dict
         |> List.sort
-        |> List.map (Frontend.viewLevel level2 dict)
+        |> List.map (Frontend.viewLevel level dict)
         |> Element.row [ Element.spacing 8 ]
 
 
@@ -167,6 +194,28 @@ level0 =
         , portalPairs =
             [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
               , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
+              , timeDelta = 2
+              }
+            ]
+        , doors = []
+        }
+        |> unwrapResult
+
+
+level3 : Level
+level3 =
+    Level.init
+        { playerStart = ( 1, 1 )
+        , walls = [ ( 0, 0 ), ( 0, 1 ), ( 4, 1 ) ] |> Set.fromList
+        , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
+        , exit =
+            { position = ( 3, 5 )
+            , tileEdge = LeftEdge
+            }
+        , levelSize = ( 5, 5 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+              , secondPortal = { position = ( 3, 1 ), tileEdge = RightEdge }
               , timeDelta = 2
               }
             ]
@@ -219,32 +268,7 @@ level2 =
         |> unwrapResult
 
 
-level3Actions : List (Maybe MoveAction)
-level3Actions =
-    [ Just MoveRight, Just MoveRight, Just MoveRight, Just MoveRight, Just MoveUp, Just MoveUp, Just MoveUp, Just MoveUp, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Nothing, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveLeft, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveDown, Just MoveDown, Just MoveDown, Just MoveRight, Just MoveRight, Just MoveUp, Just MoveUp ]
-
-
-level3 : Result String Level
-level3 =
-    Level.init
-        { playerStart = ( 1, 2 )
-        , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
-        , boxesStart = [] |> Set.fromList
-        , exit =
-            { position = ( 7, 0 )
-            , tileEdge = TopEdge
-            }
-        , levelSize = ( 8, 5 )
-        , portalPairs =
-            [ { firstPortal = { position = ( 5, 0 ), tileEdge = TopEdge }
-              , secondPortal = { position = ( 5, 4 ), tileEdge = BottomEdge }
-              , timeDelta = 8
-              }
-            ]
-        , doors = [ { doorPosition = ( 3, 2 ), buttonPosition = ( 6, 2 ) } ]
-        }
-
-
+unwrapResult : Result e a -> a
 unwrapResult result =
     case result of
         Ok ok ->

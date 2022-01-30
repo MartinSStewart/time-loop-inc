@@ -59,12 +59,20 @@ moveActionReverse moveAction =
             MoveUp
 
 
+type NewBox
+    = NormalBox BoxInstant
+    | TimeTravelBox ( Int, BoxInstant )
+
+
 step :
     Level
     -> List (Maybe MoveAction)
-    -> List PlayerInstant
+    -> List BoxOrPlayer
     -> LevelInstant
-    -> { nextInstant : LevelInstant, playerTimeTravel : List ( Int, PlayerInstant ) }
+    ->
+        { nextInstant : LevelInstant
+        , playerTimeTravel : List ( Int, BoxOrPlayer )
+        }
 step level moveActions timeTravellers levelInstant =
     let
         getMoveAction : PlayerInstant -> Maybe MoveAction
@@ -98,6 +106,44 @@ step level moveActions timeTravellers levelInstant =
                 )
                 portalPairs
 
+        boxes =
+            List.map
+                (\box ->
+                    let
+                        tryMove : MoveAction -> Maybe NewBox
+                        tryMove moveAction =
+                            if
+                                boxIsPushed box (Just moveAction)
+                                    && not (boxIsPushed box (Just (moveActionReverse moveAction)))
+                            then
+                                case List.find (.portal >> entersPortal box.position (Just moveAction)) portals of
+                                    Just portal ->
+                                        TimeTravelBox ( portal.timeDelta, { position = portal.portalExit.position } )
+                                            |> Just
+
+                                    Nothing ->
+                                        let
+                                            newPosition =
+                                                Point.add (actionOffset (Just moveAction)) box.position
+                                        in
+                                        if Level.isWall level newPosition then
+                                            Nothing
+
+                                        else
+                                            NormalBox { position = newPosition } |> Just
+
+                            else
+                                Nothing
+                    in
+                    case List.filterMap tryMove [ MoveRight, MoveLeft, MoveUp, MoveDown ] of
+                        newBox :: _ ->
+                            newBox
+
+                        [] ->
+                            NormalBox box
+                )
+                levelInstant.boxes
+
         nextInstant =
             { levelInstant
                 | players =
@@ -127,38 +173,37 @@ step level moveActions timeTravellers levelInstant =
                                     |> Just
                         )
                         levelInstant.players
-                        ++ timeTravellers
-                , boxes =
-                    List.map
-                        (\box ->
-                            let
-                                tryMove : MoveAction -> Maybe Point
-                                tryMove moveAction =
-                                    if
-                                        boxIsPushed box (Just moveAction)
-                                            && not (boxIsPushed box (Just (moveActionReverse moveAction)))
-                                    then
-                                        let
-                                            newPosition =
-                                                Point.add (actionOffset (Just moveAction)) box.position
-                                        in
-                                        if Level.isWall level newPosition then
-                                            Nothing
+                        ++ List.filterMap
+                            (\timeTraveller ->
+                                case timeTraveller of
+                                    Player player ->
+                                        Just player
 
-                                        else
-                                            Just newPosition
-
-                                    else
+                                    Box _ ->
                                         Nothing
-                            in
-                            { position =
-                                [ MoveRight, MoveLeft, MoveUp, MoveDown ]
-                                    |> List.filterMap tryMove
-                                    |> List.head
-                                    |> Maybe.withDefault box.position
-                            }
+                            )
+                            timeTravellers
+                , boxes =
+                    List.filterMap
+                        (\newBox ->
+                            case newBox of
+                                NormalBox normalBox ->
+                                    Just normalBox
+
+                                TimeTravelBox _ ->
+                                    Nothing
                         )
-                        levelInstant.boxes
+                        boxes
+                        ++ List.filterMap
+                            (\timeTraveller ->
+                                case timeTraveller of
+                                    Player _ ->
+                                        Nothing
+
+                                    Box box ->
+                                        Just box
+                            )
+                            timeTravellers
             }
     in
     { nextInstant = nextInstant
@@ -176,6 +221,7 @@ step level moveActions timeTravellers levelInstant =
                         , { position = portal.portalExit.position
                           , age = player.age + 1
                           }
+                            |> Player
                         )
                             |> Just
 
@@ -183,6 +229,16 @@ step level moveActions timeTravellers levelInstant =
                         Nothing
             )
             levelInstant.players
+            ++ List.filterMap
+                (\newBox ->
+                    case newBox of
+                        NormalBox _ ->
+                            Nothing
+
+                        TimeTravelBox ( timeDelta, box ) ->
+                            Just ( timeDelta, Box box )
+                )
+                boxes
     }
 
 
@@ -314,7 +370,6 @@ paradoxes level timeline_ =
                                 _ ->
                                     { time = time
                                     , position = position
-                                    , resolvable = False
                                     }
                                         |> Just
                         )
@@ -342,7 +397,6 @@ doors level instant =
 type alias Paradox =
     { time : Int
     , position : Point
-    , resolvable : Bool
     }
 
 
@@ -390,10 +444,15 @@ getTimelineInstant level currentTime timeline_ =
             |> Maybe.withDefault { players = [], boxes = [] }
 
 
+type BoxOrPlayer
+    = Box BoxInstant
+    | Player PlayerInstant
+
+
 timelineHelper :
     Level
     -> RegularDict.Dict Int LevelInstant
-    -> Set { appearTime : Int, player : PlayerInstant }
+    -> Set { appearTime : Int, item : BoxOrPlayer }
     -> Int
     -> List (Maybe MoveAction)
     -> RegularDict.Dict Int LevelInstant
@@ -408,9 +467,9 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                         level
                         moveActions
                         (List.filterMap
-                            (\{ appearTime, player } ->
+                            (\{ appearTime, item } ->
                                 if appearTime == currentTime + 1 then
-                                    Just player
+                                    Just item
 
                                 else
                                     Nothing
@@ -422,14 +481,9 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                 Nothing ->
                     --Debug.todo "Failed to get instant"
                     { nextInstant = { boxes = [], players = [] }, playerTimeTravel = [] }
-
-        nextFuturePlayers =
-            futurePlayers
-
-        --List.filter (\{ appearTime } -> appearTime >= currentTime) futurePlayers
     in
     case playerTimeTravel of
-        ( timeDelta, player ) :: _ ->
+        ( timeDelta, item ) :: _ ->
             let
                 newTime =
                     currentTime + timeDelta
@@ -438,14 +492,18 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    (Set.insert { appearTime = newTime, player = player } nextFuturePlayers)
+                    (Set.insert { appearTime = newTime, item = item } futurePlayers)
                     (currentTime + 1)
                     moveActions
 
             else
                 case RegularDict.get newTime timeline_ of
                     Just timeTravelInstant ->
-                        if List.any ((==) player) timeTravelInstant.players then
+                        if
+                            List.any
+                                ((==) item)
+                                (List.map Player timeTravelInstant.players ++ List.map Box timeTravelInstant.boxes)
+                        then
                             --let
                             --    _ =
                             --        Debug.log "stable instant" ""
@@ -453,7 +511,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                             timelineHelper
                                 level
                                 (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                                nextFuturePlayers
+                                futurePlayers
                                 (currentTime + 1)
                                 moveActions
 
@@ -466,10 +524,25 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                                 level
                                 (RegularDict.insert
                                     newTime
-                                    { timeTravelInstant | players = player :: timeTravelInstant.players }
+                                    { timeTravelInstant
+                                        | players =
+                                            case item of
+                                                Player player ->
+                                                    player :: timeTravelInstant.players
+
+                                                Box _ ->
+                                                    timeTravelInstant.players
+                                        , boxes =
+                                            case item of
+                                                Player player ->
+                                                    timeTravelInstant.boxes
+
+                                                Box box ->
+                                                    box :: timeTravelInstant.boxes
+                                    }
                                     timeline_
                                 )
-                                nextFuturePlayers
+                                futurePlayers
                                 newTime
                                 moveActions
 
@@ -484,10 +557,25 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                             level
                             (RegularDict.insert
                                 newTime
-                                { timeTravelInstant | players = player :: timeTravelInstant.players }
+                                { timeTravelInstant
+                                    | players =
+                                        case item of
+                                            Player player ->
+                                                player :: timeTravelInstant.players
+
+                                            Box _ ->
+                                                timeTravelInstant.players
+                                    , boxes =
+                                        case item of
+                                            Player player ->
+                                                timeTravelInstant.boxes
+
+                                            Box box ->
+                                                box :: timeTravelInstant.boxes
+                                }
                                 timeline_
                             )
-                            nextFuturePlayers
+                            futurePlayers
                             newTime
                             moveActions
 
@@ -499,7 +587,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    nextFuturePlayers
+                    futurePlayers
                     (currentTime + 1)
                     moveActions
 
