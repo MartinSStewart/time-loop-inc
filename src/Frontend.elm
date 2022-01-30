@@ -15,6 +15,7 @@ import Lamdera
 import Level exposing (Level, Portal, TileEdge(..))
 import LevelState exposing (DoorInstant, LevelInstant, MoveAction(..), Paradox)
 import List.Extra as List
+import List.Nonempty exposing (Nonempty(..))
 import Maybe.Extra as Maybe
 import Point exposing (Point)
 import Types exposing (..)
@@ -60,6 +61,52 @@ app =
 --        }
 
 
+maybeLevels : Maybe (Nonempty Level)
+maybeLevels =
+    [ levelIntro, level0, level1, level2 ]
+        |> List.filterMap Result.toMaybe
+        |> List.Nonempty.fromList
+
+
+levelIntro : Result String Level
+levelIntro =
+    Level.init
+        { playerStart = ( 3, 3 )
+        , walls =
+            [ ( 1, 1 )
+            , ( 2, 1 )
+            , ( 3, 1 )
+            , ( 4, 1 )
+            , ( 0, 1 )
+            , ( 1, 5 )
+            , ( 2, 5 )
+            , ( 3, 5 )
+            , ( 4, 5 )
+            , ( 0, 5 )
+            , ( 0, 2 )
+            , ( 0, 3 )
+            , ( 0, 4 )
+            , ( 4, 2 )
+            , ( 4, 3 )
+            , ( 4, 4 )
+            ]
+                |> Set.fromList
+        , boxesStart = [] |> Set.fromList
+        , exit =
+            { position = ( 6, 5 )
+            , tileEdge = BottomEdge
+            }
+        , levelSize = ( 8, 6 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 1, 3 ), tileEdge = LeftEdge }
+              , secondPortal = { position = ( 2, 0 ), tileEdge = TopEdge }
+              , timeDelta = -6
+              }
+            ]
+        , doors = []
+        }
+
+
 level0 : Result String Level
 level0 =
     Level.init
@@ -81,6 +128,68 @@ level0 =
         }
 
 
+level1 : Result String Level
+level1 =
+    Level.init
+        { playerStart = ( 1, 2 )
+        , walls =
+            [ ( 3, 0 )
+            , ( 3, 1 )
+            , ( 3, 3 )
+            , ( 3, 4 )
+            , ( 4, 0 )
+            , ( 4, 1 )
+            , ( 4, 3 )
+            , ( 4, 4 )
+            , ( 5, 0 )
+            , ( 5, 1 )
+            , ( 5, 3 )
+            , ( 5, 4 )
+            ]
+                |> Set.fromList
+        , boxesStart = [] |> Set.fromList
+        , exit =
+            { position = ( 7, 2 )
+            , tileEdge = RightEdge
+            }
+        , levelSize = ( 8, 5 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 0, 1 ), tileEdge = LeftEdge }
+              , secondPortal = { position = ( 2, 1 ), tileEdge = RightEdge }
+              , timeDelta = 9
+              }
+            ]
+        , doors =
+            [ { doorPosition = ( 3, 2 ), buttonPosition = ( 0, 4 ) }
+            , { doorPosition = ( 4, 2 ), buttonPosition = ( 1, 4 ) }
+            , { doorPosition = ( 5, 2 ), buttonPosition = ( 2, 4 ) }
+            ]
+        }
+
+
+level2 : Result String Level
+level2 =
+    Level.init
+        { playerStart = ( 1, 2 )
+        , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
+        , boxesStart = [] |> Set.fromList
+        , exit =
+            { position = ( 7, 0 )
+            , tileEdge = TopEdge
+            }
+        , levelSize = ( 8, 5 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 5, 0 ), tileEdge = TopEdge }
+              , secondPortal = { position = ( 5, 4 ), tileEdge = BottomEdge }
+              , timeDelta = 16
+              }
+            ]
+        , doors =
+            [ { doorPosition = ( 2, 2 ), buttonPosition = ( 0, 2 ) }
+            ]
+        }
+
+
 init : Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
 init _ navigationKey =
     ( { navigationKey = navigationKey } |> initLoaded
@@ -90,18 +199,19 @@ init _ navigationKey =
 
 initLoaded : Loading_ -> FrontendModel
 initLoaded loading =
-    case level0 of
-        Ok level ->
+    case maybeLevels of
+        Just levels ->
             { navigationKey = loading.navigationKey
             , moveActions = []
             , currentTime = Nothing
             , keys = []
-            , level = level
+            , futureLevels = List.Nonempty.tail levels
+            , currentLevel = List.Nonempty.head levels
             }
                 |> Loaded
 
-        Err error ->
-            LoadingFailed { error = error }
+        Nothing ->
+            LoadingFailed { error = "All levels failed to load" }
 
 
 
@@ -159,10 +269,10 @@ updateLoaded msg model =
                         Nothing
 
                 timeline =
-                    LevelState.timeline model.level model.moveActions
+                    LevelState.timeline model.currentLevel model.moveActions
 
                 maybeMoveAction =
-                    if LevelState.isCompleted model.level timeline model.moveActions then
+                    if LevelState.isCompleted model.currentLevel timeline model.moveActions then
                         Nothing
 
                     else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
@@ -186,7 +296,7 @@ updateLoaded msg model =
                 maybeMoveAction2 =
                     case maybeMoveAction of
                         Just action_ ->
-                            if LevelState.canMakeMove model.level timeline model.moveActions action_ then
+                            if LevelState.canMakeMove model.currentLevel timeline model.moveActions action_ then
                                 Just action_
 
                             else
@@ -233,16 +343,33 @@ updateLoaded msg model =
         PressedTimeMinus ->
             let
                 currentTime =
-                    getCurrentTime model (LevelState.timeline model.level model.moveActions)
+                    getCurrentTime model (LevelState.timeline model.currentLevel model.moveActions)
             in
             ( { model | currentTime = currentTime - 1 |> Just }, Cmd.none )
 
         PressedTimePlus ->
             let
                 currentTime =
-                    getCurrentTime model (LevelState.timeline model.level model.moveActions)
+                    getCurrentTime model (LevelState.timeline model.currentLevel model.moveActions)
             in
             ( { model | currentTime = currentTime + 1 |> Just }, Cmd.none )
+
+        PressedNextLevel ->
+            ( case
+                ( model.futureLevels
+                , LevelState.isCompleted
+                    model.currentLevel
+                    (LevelState.timeline model.currentLevel model.moveActions)
+                    model.moveActions
+                )
+              of
+                ( head :: rest, True ) ->
+                    { model | currentLevel = head, futureLevels = rest, moveActions = [] }
+
+                _ ->
+                    model
+            , Cmd.none
+            )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
@@ -517,47 +644,42 @@ viewLoaded : Loaded_ -> Element FrontendMsg
 viewLoaded model =
     let
         timeline =
-            LevelState.timeline model.level model.moveActions
+            LevelState.timeline model.currentLevel model.moveActions
 
         currentTime =
             getCurrentTime model timeline
 
         paradoxes : List Paradox
         paradoxes =
-            LevelState.paradoxes model.level timeline
+            LevelState.paradoxes model.currentLevel timeline
 
         --_ =
         --    Debug.log "" model.moveActions
     in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
-        [ viewLevel model.level timeline currentTime
+        [ viewLevel model.currentLevel timeline currentTime
         , Element.row
             [ Element.spacing 64 ]
             [ Element.row [ Element.spacing 8, Element.width (Element.px 196) ]
                 [ button
-                    [ Element.padding 8
-                    , Element.Background.color (Element.rgb 0.7 0.7 0.7)
-                    , Element.width (Element.px 30)
-                    , Element.Font.center
-                    ]
+                    (Element.width (Element.px 30) :: buttonAttributes)
                     { onPress = PressedTimeMinus, label = Element.text "-" }
                 , Element.text ("Viewing t = " ++ String.fromInt currentTime)
                 , button
-                    [ Element.padding 8
-                    , Element.Background.color (Element.rgb 0.7 0.7 0.7)
-                    , Element.alignRight
-                    , Element.width (Element.px 30)
-                    , Element.Font.center
-                    ]
+                    (Element.width (Element.px 30) :: buttonAttributes)
                     { onPress = PressedTimePlus, label = Element.text "+" }
                 ]
             , "You are at t = "
                 ++ String.fromInt (LevelState.currentPlayerTime timeline model.moveActions)
                 |> Element.text
             ]
-        , if LevelState.isCompleted model.level timeline model.moveActions then
-            Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
+        , if LevelState.isCompleted model.currentLevel timeline model.moveActions then
+            Element.row
+                [ Element.spacing 16 ]
+                [ Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
+                , button buttonAttributes { onPress = PressedNextLevel, label = Element.text "Next level" }
+                ]
 
           else if List.isEmpty paradoxes then
             Element.none
@@ -590,6 +712,15 @@ viewLoaded model =
         ]
 
 
+buttonAttributes =
+    [ Element.padding 8
+    , Element.Background.color (Element.rgb 0.7 0.7 0.7)
+    , Element.alignRight
+    , Element.Font.center
+    ]
+
+
+button : List (Element.Attribute a) -> { b | onPress : a, label : Element a } -> Element a
 button attributes { onPress, label } =
     Element.Input.button
         attributes

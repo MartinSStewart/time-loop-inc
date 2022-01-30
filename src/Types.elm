@@ -5,6 +5,7 @@ import Browser.Navigation exposing (Key)
 import Keyboard
 import Level exposing (Level)
 import LevelState exposing (MoveAction)
+import List.Nonempty exposing (Nonempty)
 import Url exposing (Url)
 
 
@@ -23,7 +24,8 @@ type alias Loaded_ =
     , moveActions : List (Maybe MoveAction)
     , currentTime : Maybe Int
     , keys : List Keyboard.Key
-    , level : Level
+    , futureLevels : List Level
+    , currentLevel : Level
     }
 
 
@@ -41,6 +43,7 @@ type FrontendMsg
     | KeyMsg Keyboard.Msg
     | PressedTimeMinus
     | PressedTimePlus
+    | PressedNextLevel
 
 
 type ToBackend
