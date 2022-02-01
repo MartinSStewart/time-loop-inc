@@ -15,6 +15,7 @@ main =
     List.map
         viewTestResult
         [ test "Can push box" test0
+        , test "Portal timing is correct" test4
         , test "Can push box back in time" test3
         , test "Go through portal and backwards in time" test1
         , test "Go through portal and forwards in time" test2
@@ -45,9 +46,9 @@ viewTestResult (Test name testResult) =
                 ]
 
 
-test : String -> TestResult -> Test
+test : String -> (() -> TestResult) -> Test
 test name testResult =
-    Test name testResult
+    Test name (testResult ())
 
 
 type TestResult
@@ -59,14 +60,34 @@ type Test
     = Test String TestResult
 
 
-test0 : TestResult
-test0 =
+test0 : () -> TestResult
+test0 () =
     let
         moveActions =
             [ Just MoveRight ]
 
+        level =
+            Level.init
+                { playerStart = ( 1, 1 )
+                , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
+                , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
+                , exit =
+                    { position = ( 3, 1 )
+                    , tileEdge = LeftEdge
+                    }
+                , levelSize = ( 5, 5 )
+                , portalPairs =
+                    [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+                      , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
+                      , timeDelta = 2
+                      }
+                    ]
+                , doors = []
+                }
+                |> unwrapResult
+
         output =
-            LevelState.timeline level0 moveActions
+            LevelState.timeline level moveActions
 
         expected =
             [ ( 1, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
@@ -80,21 +101,40 @@ test0 =
      else
         Failed
     )
-        (actualAndExpected level0 output expected)
+        (actualAndExpected level output expected)
 
 
-test3 : TestResult
-test3 =
+test3 : () -> TestResult
+test3 () =
     let
         moveActions =
             [ Just MoveRight, Just MoveRight ]
 
+        level =
+            Level.init
+                { playerStart = ( 1, 1 )
+                , walls = [ ( 0, 0 ), ( 0, 1 ), ( 4, 1 ) ] |> Set.fromList
+                , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
+                , exit =
+                    { position = ( 3, 5 )
+                    , tileEdge = LeftEdge
+                    }
+                , levelSize = ( 5, 5 )
+                , portalPairs =
+                    [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+                      , secondPortal = { position = ( 3, 1 ), tileEdge = RightEdge }
+                      , timeDelta = 2
+                      }
+                    ]
+                , doors = []
+                }
+                |> unwrapResult
+
         output =
-            LevelState.timeline level3 moveActions |> Debug.log ""
+            LevelState.timeline level moveActions
 
         expected =
-            [ ( -1, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = -1, position = ( 1, 1 ) } ] } )
-            , ( 0, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
+            [ ( 0, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
             , ( 1, { boxes = [ { position = ( 0, 2 ) }, { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
             , ( 2, { boxes = [ { position = ( 0, 2 ) } ], players = [ { age = 2, position = ( 3, 1 ) } ] } )
             ]
@@ -106,23 +146,42 @@ test3 =
      else
         Failed
     )
-        (actualAndExpected level3 output expected)
+        (actualAndExpected level output expected)
 
 
-test1 : TestResult
-test1 =
+test1 : () -> TestResult
+test1 () =
     let
         moveActions =
             [ Just MoveRight, Just MoveRight, Just MoveRight ]
 
+        level =
+            Level.init
+                { playerStart = ( 3, 3 )
+                , walls = [] |> Set.fromList
+                , boxesStart = [] |> Set.fromList
+                , exit =
+                    { position = ( 3, 1 )
+                    , tileEdge = LeftEdge
+                    }
+                , levelSize = ( 5, 5 )
+                , portalPairs =
+                    [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+                      , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
+                      , timeDelta = 2
+                      }
+                    ]
+                , doors = []
+                }
+                |> unwrapResult
+
         output =
-            LevelState.timeline level1 moveActions
+            LevelState.timeline level moveActions
 
         expected =
-            [ ( -1, { boxes = [], players = [ { age = 2, position = ( 0, 2 ) }, { age = -1, position = ( 3, 3 ) } ] } )
-            , ( 0, { boxes = [], players = [ { age = 3, position = ( 1, 2 ) }, { age = 0, position = ( 3, 3 ) } ] } )
-            , ( 1, { boxes = [], players = [ { age = 4, position = ( 1, 2 ) }, { age = 1, position = ( 4, 3 ) } ] } )
-            , ( 2, { boxes = [], players = [ { age = 5, position = ( 1, 2 ) } ] } )
+            [ ( 0, { boxes = [], players = [ { age = 2, position = ( 0, 2 ) }, { age = 0, position = ( 3, 3 ) } ] } )
+            , ( 1, { boxes = [], players = [ { age = 3, position = ( 1, 2 ) }, { age = 1, position = ( 4, 3 ) } ] } )
+            , ( 2, { boxes = [], players = [ { age = 4, position = ( 1, 2 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
@@ -132,7 +191,7 @@ test1 =
      else
         Failed
     )
-        (actualAndExpected level1 output expected)
+        (actualAndExpected level output expected)
 
 
 actualAndExpected level actual expected =
@@ -145,14 +204,34 @@ actualAndExpected level actual expected =
         ]
 
 
-test2 : TestResult
-test2 =
+test2 : () -> TestResult
+test2 () =
     let
         moveActions =
             [ Just MoveLeft, Just MoveLeft, Just MoveLeft ]
 
+        level =
+            Level.init
+                { playerStart = ( 1, 2 )
+                , walls = [] |> Set.fromList
+                , boxesStart = [] |> Set.fromList
+                , exit =
+                    { position = ( 3, 1 )
+                    , tileEdge = LeftEdge
+                    }
+                , levelSize = ( 5, 5 )
+                , portalPairs =
+                    [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+                      , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
+                      , timeDelta = 1
+                      }
+                    ]
+                , doors = []
+                }
+                |> unwrapResult
+
         output =
-            LevelState.timeline level2 moveActions
+            LevelState.timeline level moveActions
 
         expected =
             [ ( 0, { boxes = [], players = [ { age = 0, position = ( 1, 2 ) } ] } )
@@ -169,7 +248,53 @@ test2 =
      else
         Failed
     )
-        (actualAndExpected level2 output expected)
+        (actualAndExpected level output expected)
+
+
+test4 : () -> TestResult
+test4 () =
+    let
+        moveActions =
+            [ Just MoveRight, Just MoveRight, Just MoveLeft ]
+
+        level =
+            Level.init
+                { playerStart = ( 2, 1 )
+                , walls = [] |> Set.fromList
+                , boxesStart = [] |> Set.fromList
+                , exit =
+                    { position = ( 3, 5 )
+                    , tileEdge = LeftEdge
+                    }
+                , levelSize = ( 5, 5 )
+                , portalPairs =
+                    [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
+                      , secondPortal = { position = ( 3, 1 ), tileEdge = RightEdge }
+                      , timeDelta = 1
+                      }
+                    ]
+                , doors = []
+                }
+                |> unwrapResult
+
+        output =
+            LevelState.timeline level moveActions
+
+        expected =
+            [ ( 0, { boxes = [], players = [ { age = 0, position = ( 2, 1 ) } ] } )
+            , ( 1, { boxes = [], players = [ { age = 2, position = ( 0, 2 ) }, { age = 1, position = ( 3, 1 ) } ] } )
+            , ( 2, { boxes = [], players = [] } )
+            , ( 3, { boxes = [], players = [ { age = 3, position = ( 3, 1 ) } ] } )
+            ]
+                |> RegularDict.fromList
+    in
+    (if output == expected then
+        Passed
+
+     else
+        Failed
+    )
+        (actualAndExpected level output expected)
 
 
 showInstants : Level -> RegularDict.Dict Int LevelInstant -> Element msg
@@ -178,94 +303,6 @@ showInstants level dict =
         |> List.sort
         |> List.map (Frontend.viewLevel level dict)
         |> Element.row [ Element.spacing 8 ]
-
-
-level0 : Level
-level0 =
-    Level.init
-        { playerStart = ( 1, 1 )
-        , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
-        , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
-        , exit =
-            { position = ( 3, 1 )
-            , tileEdge = LeftEdge
-            }
-        , levelSize = ( 5, 5 )
-        , portalPairs =
-            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
-              , timeDelta = 2
-              }
-            ]
-        , doors = []
-        }
-        |> unwrapResult
-
-
-level3 : Level
-level3 =
-    Level.init
-        { playerStart = ( 1, 1 )
-        , walls = [ ( 0, 0 ), ( 0, 1 ), ( 4, 1 ) ] |> Set.fromList
-        , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
-        , exit =
-            { position = ( 3, 5 )
-            , tileEdge = LeftEdge
-            }
-        , levelSize = ( 5, 5 )
-        , portalPairs =
-            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 3, 1 ), tileEdge = RightEdge }
-              , timeDelta = 2
-              }
-            ]
-        , doors = []
-        }
-        |> unwrapResult
-
-
-level1 : Level
-level1 =
-    Level.init
-        { playerStart = ( 3, 3 )
-        , walls = [] |> Set.fromList
-        , boxesStart = [] |> Set.fromList
-        , exit =
-            { position = ( 3, 1 )
-            , tileEdge = LeftEdge
-            }
-        , levelSize = ( 5, 5 )
-        , portalPairs =
-            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
-              , timeDelta = 2
-              }
-            ]
-        , doors = []
-        }
-        |> unwrapResult
-
-
-level2 : Level
-level2 =
-    Level.init
-        { playerStart = ( 1, 2 )
-        , walls = [] |> Set.fromList
-        , boxesStart = [] |> Set.fromList
-        , exit =
-            { position = ( 3, 1 )
-            , tileEdge = LeftEdge
-            }
-        , levelSize = ( 5, 5 )
-        , portalPairs =
-            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
-              , timeDelta = 2
-              }
-            ]
-        , doors = []
-        }
-        |> unwrapResult
 
 
 unwrapResult : Result e a -> a

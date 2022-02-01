@@ -106,6 +106,7 @@ step level moveActions timeTravellers levelInstant =
                 )
                 portalPairs
 
+        boxes : List NewBox
         boxes =
             List.map
                 (\box ->
@@ -144,6 +145,7 @@ step level moveActions timeTravellers levelInstant =
                 )
                 levelInstant.boxes
 
+        nextInstant : LevelInstant
         nextInstant =
             { levelInstant
                 | players =
@@ -486,7 +488,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
         ( timeDelta, item ) :: _ ->
             let
                 newTime =
-                    currentTime + timeDelta
+                    currentTime + 1 + timeDelta
             in
             if timeDelta > 0 then
                 timelineHelper
