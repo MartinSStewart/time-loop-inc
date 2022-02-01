@@ -484,7 +484,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                     --Debug.todo "Failed to get instant"
                     { nextInstant = { boxes = [], players = [] }, playerTimeTravel = [] }
     in
-    case playerTimeTravel of
+    case List.filter (isNewTimeTravel timeline_ currentTime) playerTimeTravel of
         ( timeDelta, item ) :: _ ->
             let
                 newTime =
@@ -501,24 +501,7 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
             else
                 case RegularDict.get newTime timeline_ of
                     Just timeTravelInstant ->
-                        if
-                            List.any
-                                ((==) item)
-                                (List.map Player timeTravelInstant.players ++ List.map Box timeTravelInstant.boxes)
-                        then
-                            --let
-                            --    _ =
-                            --        Debug.log "stable instant" ""
-                            --in
-                            timelineHelper
-                                level
-                                (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                                futurePlayers
-                                (currentTime + 1)
-                                moveActions
-
-                        else
-                            newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_
+                        newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_
 
                     Nothing ->
                         newPastInstant level newTime (init newTime level) futurePlayers moveActions item timeline_
@@ -536,6 +519,31 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                     moveActions
 
 
+isNewTimeTravel timeline_ currentTime ( timeDelta, item ) =
+    let
+        newTime =
+            currentTime + 1 + timeDelta
+    in
+    case RegularDict.get newTime timeline_ of
+        Just timeTravelInstant ->
+            List.any
+                ((==) item)
+                (List.map Player timeTravelInstant.players ++ List.map Box timeTravelInstant.boxes)
+                |> not
+
+        Nothing ->
+            True
+
+
+newPastInstant :
+    Level
+    -> Int
+    -> LevelInstant
+    -> Set { appearTime : Int, item : BoxOrPlayer }
+    -> List (Maybe MoveAction)
+    -> BoxOrPlayer
+    -> RegularDict.Dict Int LevelInstant
+    -> RegularDict.Dict Int LevelInstant
 newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_ =
     timelineHelper
         level

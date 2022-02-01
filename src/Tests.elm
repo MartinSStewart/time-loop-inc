@@ -181,7 +181,6 @@ test1 () =
         expected =
             [ ( 0, { boxes = [], players = [ { age = 2, position = ( 0, 2 ) }, { age = 0, position = ( 3, 3 ) } ] } )
             , ( 1, { boxes = [], players = [ { age = 3, position = ( 1, 2 ) }, { age = 1, position = ( 4, 3 ) } ] } )
-            , ( 2, { boxes = [], players = [ { age = 4, position = ( 1, 2 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
