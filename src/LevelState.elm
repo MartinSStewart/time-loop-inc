@@ -66,14 +66,16 @@ type NewBox
 
 step :
     Level
+    -> RegularDict.Dict Int LevelInstant
+    -> Int
     -> List (Maybe MoveAction)
     -> List BoxOrPlayer
     -> LevelInstant
     ->
         { nextInstant : LevelInstant
-        , playerTimeTravel : List ( Int, BoxOrPlayer )
+        , timeTravelers : List ( Int, BoxOrPlayer )
         }
-step level moveActions timeTravellers levelInstant =
+step level timeline_ currentTime moveActions timeTravellers levelInstant =
     let
         getMoveAction : PlayerInstant -> Maybe MoveAction
         getMoveAction player =
@@ -209,7 +211,7 @@ step level moveActions timeTravellers levelInstant =
             }
     in
     { nextInstant = nextInstant
-    , playerTimeTravel =
+    , timeTravelers =
         List.filterMap
             (\player ->
                 let
@@ -451,6 +453,10 @@ type BoxOrPlayer
     | Player PlayerInstant
 
 
+newTime timeDelta currentTime =
+    currentTime + 1 + timeDelta
+
+
 timelineHelper :
     Level
     -> RegularDict.Dict Int LevelInstant
@@ -460,13 +466,13 @@ timelineHelper :
     -> RegularDict.Dict Int LevelInstant
 timelineHelper level timeline_ futurePlayers currentTime moveActions =
     let
-        --_ =
-        --    Debug.log "" ( currentTime, timeline_ )
-        { nextInstant, playerTimeTravel } =
+        { nextInstant, timeTravelers } =
             case RegularDict.get currentTime timeline_ of
                 Just currentInstant ->
                     step
                         level
+                        timeline_
+                        currentTime
                         moveActions
                         (List.filterMap
                             (\{ appearTime, item } ->
@@ -482,29 +488,29 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
 
                 Nothing ->
                     --Debug.todo "Failed to get instant"
-                    { nextInstant = { boxes = [], players = [] }, playerTimeTravel = [] }
+                    { nextInstant = { boxes = [], players = [] }, timeTravelers = [] }
     in
-    case List.filter (isNewTimeTravel timeline_ currentTime) playerTimeTravel of
+    case List.filter (isNewTimeTravel timeline_ currentTime) timeTravelers of
         ( timeDelta, item ) :: _ ->
             let
-                newTime =
-                    currentTime + 1 + timeDelta
+                newTime_ =
+                    newTime timeDelta currentTime
             in
             if timeDelta > 0 then
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    (Set.insert { appearTime = newTime, item = item } futurePlayers)
+                    (Set.insert { appearTime = newTime_, item = item } futurePlayers)
                     (currentTime + 1)
                     moveActions
 
             else
-                case RegularDict.get newTime timeline_ of
+                case RegularDict.get newTime_ timeline_ of
                     Just timeTravelInstant ->
-                        newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_
+                        newPastInstant level newTime_ timeTravelInstant futurePlayers moveActions item timeline_
 
                     Nothing ->
-                        newPastInstant level newTime (init newTime level) futurePlayers moveActions item timeline_
+                        newPastInstant level newTime_ (init newTime_ level) futurePlayers moveActions item timeline_
 
         [] ->
             if isTimelineFinished timeline_ moveActions currentTime then
@@ -519,12 +525,9 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                     moveActions
 
 
+isNewTimeTravel : RegularDict.Dict Int LevelInstant -> Int -> ( Int, BoxOrPlayer ) -> Bool
 isNewTimeTravel timeline_ currentTime ( timeDelta, item ) =
-    let
-        newTime =
-            currentTime + 1 + timeDelta
-    in
-    case RegularDict.get newTime timeline_ of
+    case RegularDict.get (newTime timeDelta currentTime) timeline_ of
         Just timeTravelInstant ->
             List.any
                 ((==) item)
@@ -544,11 +547,11 @@ newPastInstant :
     -> BoxOrPlayer
     -> RegularDict.Dict Int LevelInstant
     -> RegularDict.Dict Int LevelInstant
-newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_ =
+newPastInstant level newTime_ timeTravelInstant futurePlayers moveActions item timeline_ =
     timelineHelper
         level
         (RegularDict.insert
-            newTime
+            newTime_
             { timeTravelInstant
                 | players =
                     case item of
@@ -568,7 +571,7 @@ newPastInstant level newTime timeTravelInstant futurePlayers moveActions item ti
             timeline_
         )
         futurePlayers
-        newTime
+        newTime_
         moveActions
 
 
