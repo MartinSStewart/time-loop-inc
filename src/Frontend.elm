@@ -63,8 +63,8 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    --[ levelIntro, level0, level1, level2 ]
-    [ level2 ]
+    [ levelIntro, level0, level1, level2 ]
+        --[ level2 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
 
@@ -157,7 +157,7 @@ level1 =
         , portalPairs =
             [ { firstPortal = { position = ( 0, 1 ), tileEdge = LeftEdge }
               , secondPortal = { position = ( 2, 1 ), tileEdge = RightEdge }
-              , timeDelta = 9
+              , timeDelta = 10
               }
             ]
         , doors =
