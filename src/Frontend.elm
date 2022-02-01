@@ -63,7 +63,8 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    [ levelIntro, level0, level1, level2 ]
+    --[ levelIntro, level0, level1, level2 ]
+    [ level2 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
 
@@ -172,7 +173,7 @@ level2 =
     Level.init
         { playerStart = ( 1, 2 )
         , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
-        , boxesStart = [] |> Set.fromList
+        , boxesStart = [ ( 5, 2 ) ] |> Set.fromList
         , exit =
             { position = ( 7, 0 )
             , tileEdge = TopEdge
@@ -185,7 +186,7 @@ level2 =
               }
             ]
         , doors =
-            [ { doorPosition = ( 2, 2 ), buttonPosition = ( 0, 2 ) }
+            [ { doorPosition = ( 3, 2 ), buttonPosition = ( 0, 2 ) }
             ]
         }
 

@@ -516,68 +516,10 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                                 moveActions
 
                         else
-                            --let
-                            --    _ =
-                            --        Debug.log "existing instant" ""
-                            --in
-                            timelineHelper
-                                level
-                                (RegularDict.insert
-                                    newTime
-                                    { timeTravelInstant
-                                        | players =
-                                            case item of
-                                                Player player ->
-                                                    player :: timeTravelInstant.players
-
-                                                Box _ ->
-                                                    timeTravelInstant.players
-                                        , boxes =
-                                            case item of
-                                                Player player ->
-                                                    timeTravelInstant.boxes
-
-                                                Box box ->
-                                                    box :: timeTravelInstant.boxes
-                                    }
-                                    timeline_
-                                )
-                                futurePlayers
-                                newTime
-                                moveActions
+                            newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_
 
                     Nothing ->
-                        let
-                            --_ =
-                            --    Debug.log "new instant" ""
-                            timeTravelInstant =
-                                init newTime level
-                        in
-                        timelineHelper
-                            level
-                            (RegularDict.insert
-                                newTime
-                                { timeTravelInstant
-                                    | players =
-                                        case item of
-                                            Player player ->
-                                                player :: timeTravelInstant.players
-
-                                            Box _ ->
-                                                timeTravelInstant.players
-                                    , boxes =
-                                        case item of
-                                            Player player ->
-                                                timeTravelInstant.boxes
-
-                                            Box box ->
-                                                box :: timeTravelInstant.boxes
-                                }
-                                timeline_
-                            )
-                            futurePlayers
-                            newTime
-                            moveActions
+                        newPastInstant level newTime (init newTime level) futurePlayers moveActions item timeline_
 
         [] ->
             if isTimelineFinished timeline_ moveActions currentTime then
@@ -590,6 +532,34 @@ timelineHelper level timeline_ futurePlayers currentTime moveActions =
                     futurePlayers
                     (currentTime + 1)
                     moveActions
+
+
+newPastInstant level newTime timeTravelInstant futurePlayers moveActions item timeline_ =
+    timelineHelper
+        level
+        (RegularDict.insert
+            newTime
+            { timeTravelInstant
+                | players =
+                    case item of
+                        Player player ->
+                            player :: timeTravelInstant.players
+
+                        Box _ ->
+                            timeTravelInstant.players
+                , boxes =
+                    case item of
+                        Player _ ->
+                            timeTravelInstant.boxes
+
+                        Box box ->
+                            box :: timeTravelInstant.boxes
+            }
+            timeline_
+        )
+        futurePlayers
+        newTime
+        moveActions
 
 
 isTimelineFinished : RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Int -> Bool
