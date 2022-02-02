@@ -494,7 +494,7 @@ timelineHelper :
     -> Mode
     -> List (Maybe MoveAction)
     -> RegularDict.Dict Int LevelInstant
-timelineHelper level timeline_ futurePlayers currentTime mode moveActions =
+timelineHelper level timeline_ futureItems currentTime mode moveActions =
     let
         { nextInstant, timeTravelers } =
             case RegularDict.get currentTime timeline_ of
@@ -512,7 +512,7 @@ timelineHelper level timeline_ futurePlayers currentTime mode moveActions =
                                 else
                                     Nothing
                             )
-                            (Set.toList futurePlayers)
+                            (Set.toList futureItems)
                         )
                         currentInstant
 
@@ -553,7 +553,7 @@ timelineHelper level timeline_ futurePlayers currentTime mode moveActions =
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    (Set.insert { appearTime = newTime_, item = item } futurePlayers)
+                    (Set.insert { appearTime = newTime_, item = item } futureItems)
                     (currentTime + 1)
                     mode
                     moveActions
@@ -581,22 +581,16 @@ timelineHelper level timeline_ futurePlayers currentTime mode moveActions =
                         }
                         timeline_
                     )
-                    futurePlayers
+                    futureItems
                     newTime_
                     mode
                     moveActions
 
         [] ->
-            if isTimelineFinished timeline_ moveActions currentTime then
+            if isTimelineFinished futureItems timeline_ moveActions currentTime then
                 case mode of
                     PlayerTimeTravel ->
-                        timelineHelper
-                            level
-                            timeline_
-                            futurePlayers
-                            0
-                            BoxTimeTravel
-                            moveActions
+                        timelineHelper level timeline_ futureItems 0 BoxTimeTravel moveActions
 
                     BoxTimeTravel ->
                         timeline_
@@ -605,7 +599,7 @@ timelineHelper level timeline_ futurePlayers currentTime mode moveActions =
                 timelineHelper
                     level
                     (RegularDict.insert (currentTime + 1) nextInstant timeline_)
-                    futurePlayers
+                    futureItems
                     (currentTime + 1)
                     mode
                     moveActions
@@ -624,8 +618,13 @@ isNewTimeTravel timeline_ currentTime ( timeDelta, item ) =
             True
 
 
-isTimelineFinished : RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Int -> Bool
-isTimelineFinished timeline_ moveActions currentTime =
+isTimelineFinished :
+    Set { appearTime : Int, item : BoxOrPlayer }
+    -> RegularDict.Dict Int LevelInstant
+    -> List (Maybe MoveAction)
+    -> Int
+    -> Bool
+isTimelineFinished futureItem timeline_ moveActions currentTime =
     let
         timelineList =
             RegularDict.toList timeline_
@@ -635,10 +634,13 @@ isTimelineFinished timeline_ moveActions currentTime =
 
         totalMoves =
             List.length moveActions
+
+        latestFutureItem =
+            Set.toList futureItem |> List.maximumBy .appearTime |> Maybe.map .appearTime |> Maybe.withDefault 0
     in
     List.any (\( _, instant ) -> List.any (.age >> (==) totalMoves) instant.players) timelineList
-        && currentTime
-        >= latestTime
+        && (currentTime >= latestTime)
+        && (currentTime >= latestFutureItem)
 
 
 init : Int -> Level -> LevelInstant

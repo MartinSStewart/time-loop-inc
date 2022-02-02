@@ -34,33 +34,6 @@ app =
         }
 
 
-
----- MODEL ----
---getLevel : Result String Level
---getLevel =
---    Level.init
---        { playerStart = ( 1, 1 )
---        , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
---        , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
---        , exit =
---            { position = ( 3, 0 )
---            , tileEdge = TopEdge
---            }
---        , levelSize = ( 5, 5 )
---        , portalPairs =
---            [ { firstPortal = { position = ( 0, 2 ), tileEdge = LeftEdge }
---              , secondPortal = { position = ( 4, 3 ), tileEdge = RightEdge }
---              , timeDelta = 2
---              }
---            , { firstPortal = { position = ( 0, 4 ), tileEdge = LeftEdge }
---              , secondPortal = { position = ( 4, 1 ), tileEdge = RightEdge }
---              , timeDelta = 8
---              }
---            ]
---        , doors = [ { doorPosition = ( 2, 2 ), buttonPosition = ( 2, 3 ) } ]
---        }
-
-
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
     [ levelIntro, level0, level1, level2 ]
