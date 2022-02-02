@@ -652,7 +652,11 @@ viewLoaded model =
             Element.row
                 [ Element.spacing 16 ]
                 [ Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
-                , button buttonAttributes { onPress = PressedNextLevel, label = Element.text "Next level" }
+                , if List.isEmpty model.futureLevels then
+                    Element.text "No more levels :("
+
+                  else
+                    button buttonAttributes { onPress = PressedNextLevel, label = Element.text "Next level" }
                 ]
 
           else if List.isEmpty paradoxes then
