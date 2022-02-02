@@ -15,8 +15,8 @@ main =
     List.map
         viewTestResult
         [ test "Can push box" test0
-        , test "Portal timing is correct" test4
         , test "Can push box back in time" test3
+        , test "Portal timing is correct" test4
         , test "Go through portal and backwards in time" test1
         , test "Go through portal and forwards in time" test2
         ]
@@ -108,7 +108,7 @@ test3 : () -> TestResult
 test3 () =
     let
         moveActions =
-            [ Just MoveRight, Just MoveRight ]
+            [ Just MoveRight, Just MoveRight, Just MoveRight ]
 
         level =
             Level.init
@@ -135,8 +135,8 @@ test3 () =
 
         expected =
             [ ( 0, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
-            , ( 1, { boxes = [ { position = ( 0, 2 ) }, { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
-            , ( 2, { boxes = [ { position = ( 0, 2 ) } ], players = [ { age = 2, position = ( 3, 1 ) } ] } )
+            , ( 1, { boxes = [ { position = ( 1, 2 ) }, { position = ( 3, 1 ) } ], players = [ { age = 3, position = ( 0, 2 ) }, { age = 1, position = ( 2, 1 ) } ] } )
+            , ( 2, { boxes = [ { position = ( 1, 2 ) } ], players = [ { age = 4, position = ( 0, 2 ) }, { age = 2, position = ( 3, 1 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
