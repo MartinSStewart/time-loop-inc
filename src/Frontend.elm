@@ -377,8 +377,8 @@ view model =
     }
 
 
-viewLevel : Level -> RegularDict.Dict Int LevelInstant -> Int -> Element msg
-viewLevel level timeline currentTime =
+viewLevel : List (Maybe MoveAction) -> Level -> RegularDict.Dict Int LevelInstant -> Int -> Element msg
+viewLevel moveActions level timeline currentTime =
     let
         ( w, h ) =
             Level.levelSize level
@@ -588,7 +588,14 @@ viewLevel level timeline currentTime =
                                     players ->
                                         Element.row
                                             [ Element.centerX, Element.centerY ]
-                                            [ Element.text "P"
+                                            [ Element.el
+                                                [ if List.any (.age >> (==) (List.length moveActions)) players then
+                                                    Element.Font.bold
+
+                                                  else
+                                                    Element.Font.regular
+                                                ]
+                                                (Element.text "P")
                                             , List.map (.age >> String.fromInt) players
                                                 |> String.join "&"
                                                 |> Element.text
@@ -626,13 +633,10 @@ viewLoaded model =
         paradoxes : List Paradox
         paradoxes =
             LevelState.paradoxes model.currentLevel timeline
-
-        --_ =
-        --    Debug.log "" model.moveActions
     in
     Element.column
         [ Element.padding 16, Element.spacing 8 ]
-        [ viewLevel model.currentLevel timeline currentTime
+        [ viewLevel model.moveActions model.currentLevel timeline currentTime
         , Element.row
             [ Element.spacing 64 ]
             [ Element.row [ Element.spacing 8, Element.width (Element.px 196) ]
