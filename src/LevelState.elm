@@ -1,11 +1,13 @@
 module LevelState exposing
-    ( DoorInstant
+    ( Direction(..)
+    , DoorInstant
+    , LaserInstant
     , LevelInstant
-    , MoveAction(..)
     , Paradox
     , canMakeMove
     , currentPlayerTime
     , doors
+    , getLaserTiles
     , getTimelineInstant
     , hasParadoxes
     , isCompleted
@@ -15,7 +17,7 @@ module LevelState exposing
 
 import AssocSet as Set exposing (Set)
 import Dict as RegularDict
-import Level exposing (Door, Level, Portal, PortalPair, TileEdge(..))
+import Level exposing (Door, Laser, Level, Portal, PortalPair, TileEdge(..))
 import List.Extra as List
 import Point exposing (Point)
 
@@ -36,27 +38,27 @@ type alias BoxInstant =
     { position : Point }
 
 
-type MoveAction
-    = MoveUp
-    | MoveLeft
-    | MoveRight
-    | MoveDown
+type Direction
+    = Up
+    | Left
+    | Right
+    | Down
 
 
-moveActionReverse : MoveAction -> MoveAction
+moveActionReverse : Direction -> Direction
 moveActionReverse moveAction =
     case moveAction of
-        MoveUp ->
-            MoveDown
+        Up ->
+            Down
 
-        MoveLeft ->
-            MoveRight
+        Left ->
+            Right
 
-        MoveRight ->
-            MoveLeft
+        Right ->
+            Left
 
-        MoveDown ->
-            MoveUp
+        Down ->
+            Up
 
 
 type NewBox
@@ -68,7 +70,7 @@ step :
     Level
     -> RegularDict.Dict Int LevelInstant
     -> Int
-    -> List (Maybe MoveAction)
+    -> List (Maybe Direction)
     -> List BoxOrPlayer
     -> LevelInstant
     ->
@@ -77,11 +79,11 @@ step :
         }
 step level timeline_ currentTime moveActions timeTravellers levelInstant =
     let
-        getMoveAction : PlayerInstant -> Maybe MoveAction
+        getMoveAction : PlayerInstant -> Maybe Direction
         getMoveAction player =
             List.getAt player.age moveActions |> Maybe.andThen identity
 
-        boxIsPushed : BoxInstant -> MoveAction -> Bool
+        boxIsPushed : BoxInstant -> Direction -> Bool
         boxIsPushed box moveAction =
             let
                 reverseMoveTileEdge =
@@ -108,7 +110,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
 
                 Nothing ->
                     getPlayerAt
-                        (Point.add (actionOffset (Just moveAction) |> Point.negate) box.position)
+                        (Point.add (directionOffset (Just moveAction) |> Point.negate) box.position)
                         levelInstant
                         |> List.any (\player -> getMoveAction player == Just moveAction)
 
@@ -137,7 +139,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
             List.map
                 (\box ->
                     let
-                        tryMove : MoveAction -> Maybe NewBox
+                        tryMove : Direction -> Maybe NewBox
                         tryMove moveAction =
                             if
                                 boxIsPushed box moveAction
@@ -151,7 +153,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
                                     Nothing ->
                                         let
                                             newPosition =
-                                                Point.add (actionOffset (Just moveAction)) box.position
+                                                Point.add (directionOffset (Just moveAction)) box.position
                                         in
                                         if Level.isWall level newPosition then
                                             Nothing
@@ -162,7 +164,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
                             else
                                 Nothing
                     in
-                    case List.filterMap tryMove [ MoveRight, MoveLeft, MoveUp, MoveDown ] of
+                    case List.filterMap tryMove [ Right, Left, Up, Down ] of
                         newBox :: _ ->
                             newBox
 
@@ -178,7 +180,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
                     List.filterMap
                         (\player ->
                             let
-                                moveAction : Maybe MoveAction
+                                moveAction : Maybe Direction
                                 moveAction =
                                     getMoveAction player
                             in
@@ -189,7 +191,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
                                 { position =
                                     let
                                         newPosition =
-                                            Point.add (actionOffset moveAction) player.position
+                                            Point.add (directionOffset moveAction) player.position
                                     in
                                     if Level.isWall level newPosition then
                                         player.position
@@ -239,7 +241,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
         List.filterMap
             (\player ->
                 let
-                    moveAction : Maybe MoveAction
+                    moveAction : Maybe Direction
                     moveAction =
                         getMoveAction player
                 in
@@ -270,7 +272,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
     }
 
 
-isCompleted : Level -> RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Bool
+isCompleted : Level -> RegularDict.Dict Int LevelInstant -> List (Maybe Direction) -> Bool
 isCompleted level timeline_ moveActions =
     case paradoxes level timeline_ of
         [] ->
@@ -332,7 +334,7 @@ hasParadoxes level timeline_ =
     paradoxes level timeline_ |> List.isEmpty |> not
 
 
-canMakeMove : Level -> RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Maybe MoveAction -> Bool
+canMakeMove : Level -> RegularDict.Dict Int LevelInstant -> List (Maybe Direction) -> Maybe Direction -> Bool
 canMakeMove level timeline_ moveActions nextMove =
     let
         currentTime : Int
@@ -359,7 +361,7 @@ canMakeMove level timeline_ moveActions nextMove =
             True
 
 
-currentPlayerTime : RegularDict.Dict Int LevelInstant -> List (Maybe MoveAction) -> Int
+currentPlayerTime : RegularDict.Dict Int LevelInstant -> List (Maybe Direction) -> Int
 currentPlayerTime timeline_ moveActions =
     List.find
         (\( _, instant ) ->
@@ -428,6 +430,47 @@ type alias Paradox =
     }
 
 
+type alias LaserInstant =
+    { position : Point
+    , isVertical : Bool
+    }
+
+
+getLaserTiles : Level -> RegularDict.Dict Int LevelInstant -> Int -> Set LaserInstant
+getLaserTiles level timeline_ currentTime =
+    let
+        currentInstant : LevelInstant
+        currentInstant =
+            getTimelineInstant level currentTime timeline_
+
+        boxes : Set Point
+        boxes =
+            currentInstant.boxes |> List.map .position |> Set.fromList
+
+        helper : Point -> Direction -> Set LaserInstant -> Set LaserInstant
+        helper position direction set =
+            if Set.member position boxes || Level.isWall level position then
+                set
+
+            else
+                helper
+                    (Point.add position (directionOffset (Just direction)))
+                    direction
+                    (Set.insert
+                        { position = position
+                        , isVertical = direction == Up || direction == Down
+                        }
+                        set
+                    )
+    in
+    List.foldl
+        (\laser set ->
+            helper laser.position (laserDirection laser) set
+        )
+        Set.empty
+        (Level.lasers level)
+
+
 getPlayerAt : Point -> LevelInstant -> List PlayerInstant
 getPlayerAt point levelInstant =
     List.filter (\player -> player.position == point) levelInstant.players
@@ -438,7 +481,7 @@ getBoxAt point levelInstant =
     List.filter (\box -> box.position == point) levelInstant.boxes
 
 
-timeline : Level -> List (Maybe MoveAction) -> RegularDict.Dict Int LevelInstant
+timeline : Level -> List (Maybe Direction) -> RegularDict.Dict Int LevelInstant
 timeline level moveActions =
     timelineHelper level (RegularDict.singleton 0 (init 0 level)) Set.empty 0 PlayerTimeTravel moveActions
 
@@ -492,7 +535,7 @@ timelineHelper :
     -> Set { appearTime : Int, item : BoxOrPlayer }
     -> Int
     -> Mode
-    -> List (Maybe MoveAction)
+    -> List (Maybe Direction)
     -> RegularDict.Dict Int LevelInstant
 timelineHelper level timeline_ futureItems currentTime mode moveActions =
     let
@@ -621,7 +664,7 @@ isNewTimeTravel timeline_ currentTime ( timeDelta, item ) =
 isTimelineFinished :
     Set { appearTime : Int, item : BoxOrPlayer }
     -> RegularDict.Dict Int LevelInstant
-    -> List (Maybe MoveAction)
+    -> List (Maybe Direction)
     -> Int
     -> Bool
 isTimelineFinished futureItem timeline_ moveActions currentTime =
@@ -653,26 +696,26 @@ init currentTime level =
     }
 
 
-actionOffset : Maybe MoveAction -> Point
-actionOffset action =
+directionOffset : Maybe Direction -> Point
+directionOffset action =
     case action of
-        Just MoveUp ->
+        Just Up ->
             ( 0, -1 )
 
-        Just MoveLeft ->
+        Just Left ->
             ( -1, 0 )
 
-        Just MoveRight ->
+        Just Right ->
             ( 1, 0 )
 
-        Just MoveDown ->
+        Just Down ->
             ( 0, 1 )
 
         Nothing ->
             ( 0, 0 )
 
 
-entersPortal : Point -> Maybe MoveAction -> Portal -> Bool
+entersPortal : Point -> Maybe Direction -> Portal -> Bool
 entersPortal position moveAction portal =
     if position == portal.position then
         movesIntoTileEdge moveAction portal.tileEdge
@@ -681,20 +724,36 @@ entersPortal position moveAction portal =
         False
 
 
-movesIntoTileEdge : Maybe MoveAction -> TileEdge -> Bool
+movesIntoTileEdge : Maybe Direction -> TileEdge -> Bool
 movesIntoTileEdge moveAction tileEdge =
     case ( moveAction, tileEdge ) of
-        ( Just MoveUp, TopEdge ) ->
+        ( Just Up, TopEdge ) ->
             True
 
-        ( Just MoveLeft, LeftEdge ) ->
+        ( Just Left, LeftEdge ) ->
             True
 
-        ( Just MoveRight, RightEdge ) ->
+        ( Just Right, RightEdge ) ->
             True
 
-        ( Just MoveDown, BottomEdge ) ->
+        ( Just Down, BottomEdge ) ->
             True
 
         _ ->
             False
+
+
+laserDirection : Laser -> Direction
+laserDirection laser =
+    case laser.tileEdge of
+        TopEdge ->
+            Down
+
+        LeftEdge ->
+            Right
+
+        RightEdge ->
+            Left
+
+        BottomEdge ->
+            Up

@@ -7,7 +7,7 @@ import Element.Font
 import Frontend
 import Html exposing (Html)
 import Level exposing (Level, TileEdge(..))
-import LevelState exposing (LevelInstant, MoveAction(..))
+import LevelState exposing (Direction(..), LevelInstant)
 
 
 main : Html ()
@@ -64,7 +64,7 @@ test0 : () -> TestResult
 test0 () =
     let
         moveActions =
-            [ Just MoveRight ]
+            [ Just Right ]
 
         level =
             Level.init
@@ -108,7 +108,7 @@ test3 : () -> TestResult
 test3 () =
     let
         moveActions =
-            [ Just MoveRight, Just MoveRight, Just MoveRight ]
+            [ Just Right, Just Right, Just Right ]
 
         level =
             Level.init
@@ -153,7 +153,7 @@ test1 : () -> TestResult
 test1 () =
     let
         moveActions =
-            [ Just MoveRight, Just MoveRight, Just MoveRight ]
+            [ Just Right, Just Right, Just Right ]
 
         level =
             Level.init
@@ -207,7 +207,7 @@ test2 : () -> TestResult
 test2 () =
     let
         moveActions =
-            [ Just MoveLeft, Just MoveLeft, Just MoveLeft ]
+            [ Just Left, Just Left, Just Left ]
 
         level =
             Level.init
@@ -254,7 +254,7 @@ test4 : () -> TestResult
 test4 () =
     let
         moveActions =
-            [ Just MoveRight, Just MoveRight, Just MoveLeft ]
+            [ Just Right, Just Right, Just Left ]
 
         level =
             Level.init

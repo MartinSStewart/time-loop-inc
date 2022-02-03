@@ -4,7 +4,7 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Keyboard
 import Level exposing (Level)
-import LevelState exposing (MoveAction)
+import LevelState exposing (Direction)
 import List.Nonempty exposing (Nonempty)
 import Url exposing (Url)
 
@@ -21,7 +21,7 @@ type alias Loading_ =
 
 type alias Loaded_ =
     { navigationKey : Key
-    , moveActions : List (Maybe MoveAction)
+    , moveActions : List (Maybe Direction)
     , currentTime : Maybe Int
     , keys : List Keyboard.Key
     , futureLevels : List Level

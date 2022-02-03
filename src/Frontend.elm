@@ -12,8 +12,8 @@ import Element.Font
 import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
-import Level exposing (Level, Portal, TileEdge(..))
-import LevelState exposing (DoorInstant, LevelInstant, MoveAction(..), Paradox)
+import Level exposing (Laser, Level, Portal, TileEdge(..))
+import LevelState exposing (Direction(..), DoorInstant, LaserInstant, LevelInstant, Paradox)
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Maybe.Extra as Maybe
@@ -78,6 +78,7 @@ levelIntro =
               }
             ]
         , doors = []
+        , lasers = [ { position = ( 0, 0 ), tileEdge = LeftEdge } ]
         }
 
 
@@ -99,6 +100,7 @@ level0 =
               }
             ]
         , doors = [ { doorPosition = ( 3, 2 ), buttonPosition = ( 6, 2 ) } ]
+        , lasers = []
         }
 
 
@@ -138,6 +140,7 @@ level1 =
             , { doorPosition = ( 4, 2 ), buttonPosition = ( 1, 4 ) }
             , { doorPosition = ( 5, 2 ), buttonPosition = ( 2, 4 ) }
             ]
+        , lasers = []
         }
 
 
@@ -161,6 +164,7 @@ level2 =
         , doors =
             [ { doorPosition = ( 3, 2 ), buttonPosition = ( 0, 2 ) }
             ]
+        , lasers = []
         }
 
 
@@ -250,16 +254,16 @@ updateLoaded msg model =
                         Nothing
 
                     else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
-                        Just (Just MoveLeft)
+                        Just (Just Left)
 
                     else if keyPressed Keyboard.ArrowRight || keyPressed (Keyboard.Character "D") then
-                        Just (Just MoveRight)
+                        Just (Just Right)
 
                     else if keyPressed Keyboard.ArrowUp || keyPressed (Keyboard.Character "W") then
-                        Just (Just MoveUp)
+                        Just (Just Up)
 
                     else if keyPressed Keyboard.ArrowDown || keyPressed (Keyboard.Character "S") then
-                        Just (Just MoveDown)
+                        Just (Just Down)
 
                     else if keyPressed Keyboard.Spacebar then
                         Just Nothing
@@ -377,7 +381,7 @@ view model =
     }
 
 
-viewLevel : List (Maybe MoveAction) -> Level -> RegularDict.Dict Int LevelInstant -> Int -> Element msg
+viewLevel : List (Maybe Direction) -> Level -> RegularDict.Dict Int LevelInstant -> Int -> Element msg
 viewLevel moveActions level timeline currentTime =
     let
         ( w, h ) =
@@ -411,6 +415,14 @@ viewLevel moveActions level timeline currentTime =
 
         exit =
             Level.exit level
+
+        laserBeams : Set LaserInstant
+        laserBeams =
+            LevelState.getLaserTiles level timeline currentTime
+
+        lasers : List Level.Laser
+        lasers =
+            Level.lasers level
     in
     List.range 0 (w - 1)
         |> List.map
@@ -460,72 +472,48 @@ viewLevel moveActions level timeline currentTime =
                                             Nothing
                             in
                             Element.el
-                                [ Element.width (Element.px 50)
-                                , Element.height (Element.px 50)
-                                , Element.Font.center
-                                , Element.Border.width 1
-                                , (if List.isEmpty tileParadoxes then
-                                    Element.none
+                                (Element.width (Element.px 50)
+                                    :: Element.height (Element.px 50)
+                                    :: Element.Font.center
+                                    :: Element.Border.width 1
+                                    :: drawParadox currentTime tileParadoxes
+                                    :: (Element.el
+                                            [ Element.Border.widthEach
+                                                { left = borderWidth LeftEdge
+                                                , right = borderWidth RightEdge
+                                                , top = borderWidth TopEdge
+                                                , bottom = borderWidth BottomEdge
+                                                }
+                                            , Element.Border.color
+                                                (if exit.position == position then
+                                                    if List.isEmpty paradoxes then
+                                                        Element.rgb 0 0.8 0
 
-                                   else
-                                    Element.el
-                                        [ Element.Font.size 14
-                                        , (if List.any (.time >> (==) currentTime) tileParadoxes then
-                                            1
+                                                    else
+                                                        Element.rgb 0.8 0 0
 
-                                           else
-                                            0.4
-                                          )
-                                            |> Element.alpha
-                                        , Element.Font.bold
-                                        , Element.alignTop
-                                        , Element.alignRight
-                                        , Element.Font.color (Element.rgb 0.8 0 0)
-                                        ]
-                                        (Element.text "⚠")
-                                  )
-                                    |> Element.inFront
-                                , Element.el
-                                    [ Element.Border.widthEach
-                                        { left = borderWidth LeftEdge
-                                        , right = borderWidth RightEdge
-                                        , top = borderWidth TopEdge
-                                        , bottom = borderWidth BottomEdge
-                                        }
-                                    , Element.Border.color
-                                        (if exit.position == position then
-                                            if List.isEmpty paradoxes then
-                                                Element.rgb 0 0.8 0
-
-                                            else
-                                                Element.rgb 0.8 0 0
-
-                                         else
-                                            Element.rgb 0.3 0.3 1
-                                        )
-                                    , Element.width Element.fill
-                                    , Element.height Element.fill
-                                    ]
-                                    Element.none
-                                    |> Element.inFront
-                                , if Set.member position walls then
-                                    Element.Background.color (Element.rgb 0 0 0)
-
-                                  else
-                                    case maybeDoor of
-                                        Just True ->
-                                            Element.Background.color (Element.rgb 0.8 0.8 0.8)
-
-                                        Just False ->
-                                            Element.Background.color (Element.rgb 0.4 0.4 0.4)
-
-                                        Nothing ->
-                                            Element.Background.color (Element.rgb 1 1 1)
-                                ]
+                                                 else
+                                                    Element.rgb 0.3 0.3 1
+                                                )
+                                            , Element.width Element.fill
+                                            , Element.height Element.fill
+                                            ]
+                                            Element.none
+                                            |> Element.inFront
+                                       )
+                                    :: drawWallsAndDoorBackground position maybeDoor walls
+                                    :: drawLaser position lasers
+                                    ++ drawLaserBeam position laserBeams
+                                )
                                 (case List.filter (\player -> player.position == position) current.players of
                                     [] ->
                                         if List.any (\box -> box.position == position) current.boxes then
-                                            Element.el [ Element.centerX, Element.centerY ] (Element.text "▨")
+                                            Element.el
+                                                [ Element.centerX
+                                                , Element.centerY
+                                                , Element.Font.size 30
+                                                ]
+                                                (Element.text "▨")
 
                                         else if maybeDoor == Just True then
                                             Element.column
@@ -606,6 +594,110 @@ viewLevel moveActions level timeline currentTime =
                     |> Element.column []
             )
         |> Element.row []
+
+
+drawLaser : Point -> List Laser -> List (Element.Attribute msg)
+drawLaser position lasers =
+    List.filterMap
+        (\laser ->
+            if laser.position == position then
+                Element.el
+                    (Element.Background.color (Element.rgb 0.5 0.2 0.2)
+                        :: Element.width (Element.px 12)
+                        :: Element.height (Element.px 12)
+                        :: (case laser.tileEdge of
+                                LeftEdge ->
+                                    [ Element.centerY ]
+
+                                TopEdge ->
+                                    [ Element.centerX ]
+
+                                BottomEdge ->
+                                    [ Element.centerX, Element.alignBottom ]
+
+                                RightEdge ->
+                                    [ Element.centerY, Element.alignRight ]
+                           )
+                    )
+                    Element.none
+                    |> Element.inFront
+                    |> Just
+
+            else
+                Nothing
+        )
+        lasers
+
+
+drawParadox currentTime tileParadoxes =
+    (if List.isEmpty tileParadoxes then
+        Element.none
+
+     else
+        Element.el
+            [ Element.Font.size 14
+            , (if List.any (.time >> (==) currentTime) tileParadoxes then
+                1
+
+               else
+                0.4
+              )
+                |> Element.alpha
+            , Element.Font.bold
+            , Element.alignTop
+            , Element.alignRight
+            , Element.Font.color (Element.rgb 0.8 0 0)
+            ]
+            (Element.text "⚠")
+    )
+        |> Element.inFront
+
+
+drawWallsAndDoorBackground position maybeDoor walls =
+    if Set.member position walls then
+        Element.Background.color (Element.rgb 0 0 0)
+
+    else
+        case maybeDoor of
+            Just True ->
+                Element.Background.color (Element.rgb 0.8 0.8 0.8)
+
+            Just False ->
+                Element.Background.color (Element.rgb 0.4 0.4 0.4)
+
+            Nothing ->
+                Element.Background.color (Element.rgb 1 1 1)
+
+
+drawLaserBeam : Point -> Set LaserInstant -> List (Element.Attribute msg)
+drawLaserBeam position lasers =
+    [ (if Set.member { position = position, isVertical = True } lasers then
+        Element.el
+            [ Element.width (Element.px 4)
+            , Element.height Element.fill
+            , Element.centerX
+            , Element.Background.color (Element.rgb 1 0 0)
+            ]
+            Element.none
+
+       else
+        Element.none
+      )
+        |> Element.behindContent
+    , (if Set.member { position = position, isVertical = False } lasers then
+        Element.el
+            [ Element.height (Element.px 4)
+            , Element.width Element.fill
+            , Element.centerY
+            , Element.Background.color (Element.rgb 1 0 0)
+            ]
+            Element.none
+
+       else
+        Element.none
+      )
+        |> Element.behindContent
+    ]
 
 
 getCurrentTime :
