@@ -557,6 +557,7 @@ slider :
     List (Attribute msg)
     ->
         { onChange : Float -> msg
+        , noOp : msg
         , label : Label msg
         , min : Float
         , max : Float
@@ -714,6 +715,7 @@ slider attributes input =
                         thumbShadowStyle
                     )
                 , Internal.Attr (Html.Attributes.class (className ++ " ui-slide-bar focusable-parent"))
+                , Internal.Attr (Html.Events.preventDefaultOn "keydown" (Json.succeed ( input.noOp, True )))
                 , Internal.Attr
                     (Html.Events.onInput
                         (\str ->

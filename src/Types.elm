@@ -1,6 +1,7 @@
 module Types exposing (..)
 
 import Browser exposing (UrlRequest)
+import Browser.Dom
 import Browser.Navigation exposing (Key)
 import Keyboard
 import Level exposing (Level)
@@ -44,6 +45,8 @@ type FrontendMsg
     | PressedTimeMinus
     | PressedTimePlus
     | PressedNextLevel
+    | DraggedTimelineSlider Int
+    | SliderLostFocus
 
 
 type ToBackend

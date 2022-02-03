@@ -3,6 +3,7 @@ module Frontend exposing (..)
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Browser
+import Browser.Dom
 import Browser.Navigation
 import Dict as RegularDict
 import Element exposing (Element)
@@ -10,6 +11,7 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Element.Keyed
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
@@ -18,6 +20,7 @@ import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Maybe.Extra as Maybe
 import Point exposing (Point)
+import Task
 import Types exposing (..)
 import Url exposing (Url)
 
@@ -379,6 +382,12 @@ updateLoaded msg model =
                     model
             , Cmd.none
             )
+
+        DraggedTimelineSlider newTime ->
+            ( { model | currentTime = Just newTime }, Cmd.none )
+
+        SliderLostFocus ->
+            ( model, Cmd.none )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
@@ -754,7 +763,7 @@ viewLoaded model =
         timeline =
             LevelState.timeline model.currentLevel model.moveActions
 
-        currentTime =
+        viewTime =
             getCurrentTime model timeline
 
         paradoxes : List Paradox
@@ -762,23 +771,9 @@ viewLoaded model =
             LevelState.paradoxes model.currentLevel timeline
     in
     Element.column
-        [ Element.padding 16, Element.spacing 8 ]
-        [ viewLevel model.moveActions model.currentLevel timeline currentTime
-        , Element.row
-            [ Element.spacing 64 ]
-            [ Element.row [ Element.spacing 8, Element.width (Element.px 196) ]
-                [ button
-                    (Element.width (Element.px 30) :: buttonAttributes)
-                    { onPress = PressedTimeMinus, label = Element.text "-" }
-                , Element.text ("Viewing t = " ++ String.fromInt currentTime)
-                , button
-                    (Element.width (Element.px 30) :: buttonAttributes)
-                    { onPress = PressedTimePlus, label = Element.text "+" }
-                ]
-            , "You are at t = "
-                ++ String.fromInt (LevelState.currentPlayerTime timeline model.moveActions)
-                |> Element.text
-            ]
+        [ Element.padding 16, Element.spacing 8, Element.width Element.fill ]
+        [ viewLevel model.moveActions model.currentLevel timeline viewTime
+        , slider viewTime (LevelState.currentPlayerTime timeline model.moveActions) paradoxes timeline
         , if LevelState.isCompleted model.currentLevel timeline model.moveActions then
             Element.row
                 [ Element.spacing 16 ]
@@ -821,6 +816,90 @@ viewLoaded model =
         ]
 
 
+slider : Int -> Int -> List Paradox -> RegularDict.Dict Int LevelInstant -> Element FrontendMsg
+slider viewTime playerTime paradoxes timeline =
+    let
+        minTime =
+            RegularDict.keys timeline
+                |> List.minimum
+                |> Maybe.withDefault 0
+                |> (\a -> 5 * ((a - 4) // 5))
+
+        maxTime =
+            RegularDict.keys timeline
+                |> List.maximum
+                |> Maybe.withDefault 0
+                |> max (minTime + 5)
+                |> (\a -> 5 + 5 * (a // 5))
+    in
+    Element.Keyed.column
+        [ Element.width Element.fill, Element.paddingXY 0 8 ]
+        [ ( String.fromInt playerTime
+          , Element.Input.slider
+                [ Element.width Element.fill
+                , Element.height (Element.px 12)
+                , List.range minTime (maxTime - 1)
+                    |> List.map
+                        (\time ->
+                            Element.el
+                                [ Element.width Element.fill
+                                , Element.height Element.fill
+                                , Element.Font.size 14
+                                , Element.Border.widthEach { left = 1, right = 1, top = 1, bottom = 1 }
+                                , (if List.any (.time >> (==) time) paradoxes then
+                                    if viewTime == time then
+                                        Element.rgb 1 0.1 0.1
+
+                                    else
+                                        Element.rgb 0.8 0 0
+
+                                   else if viewTime == time then
+                                    Element.rgb 0.7 0.7 0.7
+
+                                   else
+                                    Element.rgb 0.5 0.5 0.5
+                                  )
+                                    |> Element.Background.color
+                                , Element.above
+                                    (if minTime == time || maxTime == time || viewTime == time || playerTime == time || modBy 5 time == 0 then
+                                        Element.el [ Element.moveRight 8 ] (Element.text (String.fromInt time))
+
+                                     else
+                                        Element.none
+                                    )
+                                ]
+                                (if playerTime == time then
+                                    Element.el [ Element.moveRight 8 ] (Element.text "You")
+
+                                 else
+                                    Element.none
+                                )
+                        )
+                    |> Element.row
+                        [ Element.width Element.fill, Element.height Element.fill, Element.paddingXY 5 0 ]
+                    |> Element.behindContent
+                ]
+                { onChange = round >> DraggedTimelineSlider
+                , noOp = SliderLostFocus
+                , label = Element.Input.labelLeft [] (Element.text "Timeline")
+                , min = toFloat minTime
+                , max = toFloat maxTime
+                , value = toFloat viewTime
+                , thumb =
+                    Element.Input.thumb
+                        [ Element.width (Element.px 10)
+                        , Element.Border.rounded 4
+                        , Element.height (Element.px 24)
+                        , Element.Background.color (Element.rgb 0.9 0.9 0.9)
+                        , Element.Border.width 1
+                        , Element.Border.color (Element.rgb 0.3 0.3 0.3)
+                        ]
+                , step = Just 1
+                }
+          )
+        ]
+
+
 buttonAttributes =
     [ Element.padding 8
     , Element.Background.color (Element.rgb 0.7 0.7 0.7)
@@ -829,7 +908,7 @@ buttonAttributes =
     ]
 
 
-button : List (Element.Attribute a) -> { b | onPress : a, label : Element a } -> Element a
+button : List (Element.Attribute msg) -> { b | onPress : msg, label : Element msg } -> Element msg
 button attributes { onPress, label } =
     Element.Input.button
         attributes
