@@ -13,7 +13,7 @@ import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
-import LevelState exposing (Direction(..), DoorInstant, LaserInstant, LevelInstant, Paradox)
+import LevelState exposing (Direction(..), DoorInstant, LaserBeam, LevelInstant, Paradox)
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Maybe.Extra as Maybe
@@ -47,15 +47,6 @@ newLevel =
         { playerStart = ( 3, 3 )
         , walls =
             [ ( ( 1, 1 ), Wall )
-            , ( ( 2, 1 ), Wall )
-            , ( ( 3, 1 ), Wall )
-            , ( ( 4, 1 ), Wall )
-            , ( ( 0, 1 ), Wall )
-            , ( ( 1, 5 ), Wall )
-            , ( ( 2, 5 ), Wall )
-            , ( ( 3, 5 ), Wall )
-            , ( ( 4, 5 ), Wall )
-            , ( ( 0, 5 ), Wall )
             , ( ( 0, 2 ), Wall )
             , ( ( 0, 3 ), Wall )
             , ( ( 0, 4 ), Wall )
@@ -65,15 +56,15 @@ newLevel =
             , ( ( 4, 0 ), Glass )
             ]
                 |> Dict.fromList
-        , boxesStart = [] |> Set.fromList
+        , boxesStart = [ ( 5, 1 ) ] |> Set.fromList
         , exit =
             { position = ( 6, 5 )
             , tileEdge = BottomEdge
             }
         , levelSize = ( 8, 6 )
         , portalPairs =
-            [ { firstPortal = { position = ( 1, 3 ), tileEdge = LeftEdge }
-              , secondPortal = { position = ( 2, 0 ), tileEdge = TopEdge }
+            [ { firstPortal = { position = ( 5, 5 ), tileEdge = BottomEdge }
+              , secondPortal = { position = ( 7, 0 ), tileEdge = RightEdge }
               , timeDelta = -6
               }
             ]
@@ -456,9 +447,9 @@ viewLevel moveActions level timeline currentTime =
         exit =
             Level.exit level
 
-        laserBeams : Set LaserInstant
+        laserBeams : Set LaserBeam
         laserBeams =
-            LevelState.getLaserTiles level timeline currentTime
+            LevelState.getLaserBeams level timeline currentTime
 
         lasers : List Level.Laser
         lasers =
@@ -713,7 +704,7 @@ drawWallsAndDoorBackground position maybeDoor walls =
                     Element.Background.color (Element.rgb 1 1 1)
 
 
-drawLaserBeam : Point -> Set LaserInstant -> List (Element.Attribute msg)
+drawLaserBeam : Point -> Set LaserBeam -> List (Element.Attribute msg)
 drawLaserBeam position lasers =
     [ (if Set.member { position = position, isVertical = True } lasers then
         Element.el

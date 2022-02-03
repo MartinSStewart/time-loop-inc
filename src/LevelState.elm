@@ -1,13 +1,13 @@
 module LevelState exposing
     ( Direction(..)
     , DoorInstant
-    , LaserInstant
+    , LaserBeam
     , LevelInstant
     , Paradox
     , canMakeMove
     , currentPlayerTime
     , doors
-    , getLaserTiles
+    , getLaserBeams
     , getTimelineInstant
     , hasParadoxes
     , isCompleted
@@ -118,7 +118,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
         portalPairs =
             Level.portalPairs level
 
-        portals : List { timeDelta : Int, portal : Portal, portalExit : Portal }
+        portals : List PortalHelper
         portals =
             List.concatMap
                 (\portalPair ->
@@ -299,36 +299,6 @@ isCompleted level timeline_ moveActions =
             False
 
 
-
---case paradoxes level timeline_ of
---    [] ->
---        let
---            currentTime =
---                currentPlayerTime timeline_ moveActions
---
---            currentPlayer =
---                getTimelineInstant level currentTime timeline_
---                    |> .players
---                    |> List.find (\player -> player.age == List.length moveActions)
---
---            exit =
---                Level.exit level
---        in
---        case currentPlayer of
---            Just player ->
---                (player.position == exit.position)
---                    && movesIntoTileEdge nextMove exit.tileEdge
---                    && hasParadoxes level timeline_
---                    |> not
---
---            Nothing ->
---                Debug.todo "This shouldn't happen"
---
---
---    _ ->
---        False
-
-
 hasParadoxes : Level -> RegularDict.Dict Int LevelInstant -> Bool
 hasParadoxes level timeline_ =
     paradoxes level timeline_ |> List.isEmpty |> not
@@ -379,30 +349,34 @@ paradoxes level timeline_ =
     RegularDict.toList timeline_
         |> List.concatMap
             (\( time, instant ) ->
-                List.map .position instant.players
-                    ++ List.map .position instant.boxes
-                    ++ (getLaserTiles level timeline_ time |> Set.toList |> List.map .position)
+                List.map (\player -> { position = player.position, isLaser = False }) instant.players
+                    ++ List.map (\boxes -> { position = boxes.position, isLaser = False }) instant.boxes
+                    ++ (getLaserBeams level timeline_ time |> Set.toList |> List.map (\laser -> { position = laser.position, isLaser = True }))
                     ++ List.filterMap
                         (\{ door, isOpen } ->
                             if isOpen then
                                 Nothing
 
                             else
-                                Just door.doorPosition
+                                Just { position = door.doorPosition, isLaser = False }
                         )
                         (doors level instant)
-                    |> List.gatherEquals
+                    |> List.gatherEqualsBy .position
                     |> List.filterMap
-                        (\( position, rest ) ->
+                        (\( { position, isLaser }, rest ) ->
                             case rest of
                                 [] ->
                                     Nothing
 
                                 _ ->
-                                    { time = time
-                                    , position = position
-                                    }
-                                        |> Just
+                                    if List.map .isLaser rest |> (::) isLaser |> List.all identity then
+                                        Nothing
+
+                                    else
+                                        { time = time
+                                        , position = position
+                                        }
+                                            |> Just
                         )
             )
 
@@ -431,14 +405,14 @@ type alias Paradox =
     }
 
 
-type alias LaserInstant =
+type alias LaserBeam =
     { position : Point
     , isVertical : Bool
     }
 
 
-getLaserTiles : Level -> RegularDict.Dict Int LevelInstant -> Int -> Set LaserInstant
-getLaserTiles level timeline_ currentTime =
+getLaserBeams : Level -> RegularDict.Dict Int LevelInstant -> Int -> Set LaserBeam
+getLaserBeams level timeline_ currentTime =
     let
         currentInstant : LevelInstant
         currentInstant =
@@ -448,7 +422,7 @@ getLaserTiles level timeline_ currentTime =
         boxes =
             currentInstant.boxes |> List.map .position |> Set.fromList
 
-        helper : Point -> Direction -> Set LaserInstant -> Set LaserInstant
+        helper : Point -> Direction -> Set LaserBeam -> Set LaserBeam
         helper position direction set =
             if Set.member position boxes || Level.blocksLasers level position then
                 set
@@ -463,13 +437,80 @@ getLaserTiles level timeline_ currentTime =
                         }
                         set
                     )
+
+        portals : List PortalHelper
+        portals =
+            List.concatMap
+                (\portalPair ->
+                    [ { timeDelta = portalPair.timeDelta
+                      , portal = portalPair.firstPortal
+                      , portalExit = portalPair.secondPortal
+                      }
+                    , { timeDelta = -portalPair.timeDelta
+                      , portal = portalPair.secondPortal
+                      , portalExit = portalPair.firstPortal
+                      }
+                    ]
+                )
+                (Level.portalPairs level)
+
+        laserPortals : List Portal
+        laserPortals =
+            List.filterMap
+                (\{ portal, portalExit, timeDelta } ->
+                    if reachesLaser portals (timeDelta + currentTime) portalExit.position (laserDirection portalExit) then
+                        Just portal
+
+                    else
+                        Nothing
+                )
+                portals
+
+        lasers =
+            Level.lasers level
+
+        reachesLaser : List PortalHelper -> Int -> Point -> Direction -> Bool
+        reachesLaser portals_ time position direction =
+            let
+                boxes_ =
+                    getTimelineInstant level time timeline_ |> .boxes
+            in
+            if Level.blocksLasers level position || List.any (.position >> (==) position) boxes_ then
+                False
+
+            else
+                case
+                    List.find
+                        (\{ portal } -> portal.position == position && movesIntoTileEdge (Just direction) portal.tileEdge)
+                        portals_
+                of
+                    Just { timeDelta, portalExit } ->
+                        reachesLaser
+                            (List.filter (\a -> a.portal /= portalExit && a.portalExit /= portalExit) portals_)
+                            (timeDelta + time)
+                            portalExit.position
+                            (laserDirection portalExit)
+
+                    Nothing ->
+                        case
+                            List.find
+                                (\laser -> laser.position == position && movesIntoTileEdge (Just direction) laser.tileEdge)
+                                lasers
+                        of
+                            Just _ ->
+                                True
+
+                            Nothing ->
+                                reachesLaser portals_ time (Point.add position (directionOffset (Just direction))) direction
     in
     List.foldl
-        (\laser set ->
-            helper laser.position (laserDirection laser) set
-        )
+        (\laserOrPortal set -> helper laserOrPortal.position (laserDirection laserOrPortal) set)
         Set.empty
-        (Level.lasers level)
+        (lasers ++ laserPortals)
+
+
+type alias PortalHelper =
+    { timeDelta : Int, portal : Portal, portalExit : Portal }
 
 
 getPlayerAt : Point -> LevelInstant -> List PlayerInstant
