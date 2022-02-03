@@ -155,7 +155,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
                                             newPosition =
                                                 Point.add (directionOffset (Just moveAction)) box.position
                                         in
-                                        if Level.isWall level newPosition then
+                                        if Level.blocksMovement level newPosition then
                                             Nothing
 
                                         else
@@ -193,7 +193,7 @@ step level timeline_ currentTime moveActions timeTravellers levelInstant =
                                         newPosition =
                                             Point.add (directionOffset moveAction) player.position
                                     in
-                                    if Level.isWall level newPosition then
+                                    if Level.blocksMovement level newPosition then
                                         player.position
 
                                     else
@@ -381,6 +381,7 @@ paradoxes level timeline_ =
             (\( time, instant ) ->
                 List.map .position instant.players
                     ++ List.map .position instant.boxes
+                    ++ (getLaserTiles level timeline_ time |> Set.toList |> List.map .position)
                     ++ List.filterMap
                         (\{ door, isOpen } ->
                             if isOpen then
@@ -449,7 +450,7 @@ getLaserTiles level timeline_ currentTime =
 
         helper : Point -> Direction -> Set LaserInstant -> Set LaserInstant
         helper position direction set =
-            if Set.member position boxes || Level.isWall level position then
+            if Set.member position boxes || Level.blocksLasers level position then
                 set
 
             else

@@ -1,5 +1,6 @@
-module Level exposing (Door, Laser, Level, Portal, PortalPair, TileEdge(..), boxesStart, doors, exit, getWalls, init, isWall, lasers, levelSize, playerStart, portalPairs)
+module Level exposing (Door, Laser, Level, Portal, PortalPair, TileEdge(..), WallType(..), blocksLasers, blocksMovement, boxesStart, doors, exit, getWalls, init, lasers, levelSize, playerStart, portalPairs)
 
+import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Point exposing (Point)
 
@@ -10,7 +11,7 @@ type Level
 
 type alias Level_ =
     { playerStart : Point
-    , walls : Set Point
+    , walls : Dict Point WallType
     , boxesStart : Set Point
     , exit : Exit
     , levelSize : Point
@@ -18,6 +19,11 @@ type alias Level_ =
     , doors : List Door
     , lasers : List Laser
     }
+
+
+type WallType
+    = Wall
+    | Glass
 
 
 type alias Laser =
@@ -61,20 +67,34 @@ doors (Level level) =
     level.doors
 
 
-getWalls : Level -> Set Point
+getWalls : Level -> Dict Point WallType
 getWalls (Level level) =
     level.walls
 
 
-isWall : Level -> Point -> Bool
-isWall (Level level) position =
-    Set.member position level.walls
+blocksMovement : Level -> Point -> Bool
+blocksMovement (Level level) position =
+    Dict.member position level.walls
         || (Point.clamp
                 (Point.new 0 0)
                 (Point.add (Point.new -1 -1) level.levelSize)
                 position
                 /= position
            )
+
+
+blocksLasers : Level -> Point -> Bool
+blocksLasers (Level level) position =
+    case Dict.get position level.walls of
+        Just Glass ->
+            False
+
+        _ ->
+            Point.clamp
+                (Point.new 0 0)
+                (Point.add (Point.new -1 -1) level.levelSize)
+                position
+                /= position
 
 
 playerStart : Level -> Point
@@ -94,7 +114,7 @@ levelSize (Level level) =
 
 boxesValid : Level_ -> Bool
 boxesValid level =
-    level.boxesStart |> Set.intersect level.walls |> Set.size |> (==) 0
+    level.boxesStart |> Set.intersect (Dict.keys level.walls |> Set.fromList) |> Set.size |> (==) 0
 
 
 type alias Portal =

@@ -12,7 +12,7 @@ import Element.Font
 import Element.Input
 import Keyboard exposing (Key)
 import Lamdera
-import Level exposing (Laser, Level, Portal, TileEdge(..))
+import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
 import LevelState exposing (Direction(..), DoorInstant, LaserInstant, LevelInstant, Paradox)
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
@@ -36,35 +36,35 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    [ levelIntro, level0, level1, level2 ]
+    [ newLevel, levelIntro, level0, level1, level2 ]
         --[ level2 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
 
 
-levelIntro : Result String Level
-levelIntro =
+newLevel =
     Level.init
         { playerStart = ( 3, 3 )
         , walls =
-            [ ( 1, 1 )
-            , ( 2, 1 )
-            , ( 3, 1 )
-            , ( 4, 1 )
-            , ( 0, 1 )
-            , ( 1, 5 )
-            , ( 2, 5 )
-            , ( 3, 5 )
-            , ( 4, 5 )
-            , ( 0, 5 )
-            , ( 0, 2 )
-            , ( 0, 3 )
-            , ( 0, 4 )
-            , ( 4, 2 )
-            , ( 4, 3 )
-            , ( 4, 4 )
+            [ ( ( 1, 1 ), Wall )
+            , ( ( 2, 1 ), Wall )
+            , ( ( 3, 1 ), Wall )
+            , ( ( 4, 1 ), Wall )
+            , ( ( 0, 1 ), Wall )
+            , ( ( 1, 5 ), Wall )
+            , ( ( 2, 5 ), Wall )
+            , ( ( 3, 5 ), Wall )
+            , ( ( 4, 5 ), Wall )
+            , ( ( 0, 5 ), Wall )
+            , ( ( 0, 2 ), Wall )
+            , ( ( 0, 3 ), Wall )
+            , ( ( 0, 4 ), Wall )
+            , ( ( 4, 2 ), Wall )
+            , ( ( 4, 3 ), Wall )
+            , ( ( 4, 4 ), Wall )
+            , ( ( 4, 0 ), Glass )
             ]
-                |> Set.fromList
+                |> Dict.fromList
         , boxesStart = [] |> Set.fromList
         , exit =
             { position = ( 6, 5 )
@@ -82,11 +82,51 @@ levelIntro =
         }
 
 
+levelIntro : Result String Level
+levelIntro =
+    Level.init
+        { playerStart = ( 3, 3 )
+        , walls =
+            [ ( ( 1, 1 ), Wall )
+            , ( ( 2, 1 ), Wall )
+            , ( ( 3, 1 ), Wall )
+            , ( ( 4, 1 ), Wall )
+            , ( ( 0, 1 ), Wall )
+            , ( ( 1, 5 ), Wall )
+            , ( ( 2, 5 ), Wall )
+            , ( ( 3, 5 ), Wall )
+            , ( ( 4, 5 ), Wall )
+            , ( ( 0, 5 ), Wall )
+            , ( ( 0, 2 ), Wall )
+            , ( ( 0, 3 ), Wall )
+            , ( ( 0, 4 ), Wall )
+            , ( ( 4, 2 ), Wall )
+            , ( ( 4, 3 ), Wall )
+            , ( ( 4, 4 ), Wall )
+            ]
+                |> Dict.fromList
+        , boxesStart = [] |> Set.fromList
+        , exit =
+            { position = ( 6, 5 )
+            , tileEdge = BottomEdge
+            }
+        , levelSize = ( 8, 6 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 1, 3 ), tileEdge = LeftEdge }
+              , secondPortal = { position = ( 2, 0 ), tileEdge = TopEdge }
+              , timeDelta = -6
+              }
+            ]
+        , doors = []
+        , lasers = []
+        }
+
+
 level0 : Result String Level
 level0 =
     Level.init
         { playerStart = ( 1, 2 )
-        , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
+        , walls = [ ( ( 3, 0 ), Wall ), ( ( 3, 1 ), Wall ), ( ( 3, 3 ), Wall ), ( ( 3, 4 ), Wall ) ] |> Dict.fromList
         , boxesStart = [] |> Set.fromList
         , exit =
             { position = ( 7, 0 )
@@ -109,20 +149,20 @@ level1 =
     Level.init
         { playerStart = ( 1, 2 )
         , walls =
-            [ ( 3, 0 )
-            , ( 3, 1 )
-            , ( 3, 3 )
-            , ( 3, 4 )
-            , ( 4, 0 )
-            , ( 4, 1 )
-            , ( 4, 3 )
-            , ( 4, 4 )
-            , ( 5, 0 )
-            , ( 5, 1 )
-            , ( 5, 3 )
-            , ( 5, 4 )
+            [ ( ( 3, 0 ), Wall )
+            , ( ( 3, 1 ), Wall )
+            , ( ( 3, 3 ), Wall )
+            , ( ( 3, 4 ), Wall )
+            , ( ( 4, 0 ), Wall )
+            , ( ( 4, 1 ), Wall )
+            , ( ( 4, 3 ), Wall )
+            , ( ( 4, 4 ), Wall )
+            , ( ( 5, 0 ), Wall )
+            , ( ( 5, 1 ), Wall )
+            , ( ( 5, 3 ), Wall )
+            , ( ( 5, 4 ), Wall )
             ]
-                |> Set.fromList
+                |> Dict.fromList
         , boxesStart = [] |> Set.fromList
         , exit =
             { position = ( 7, 2 )
@@ -148,7 +188,7 @@ level2 : Result String Level
 level2 =
     Level.init
         { playerStart = ( 1, 2 )
-        , walls = [ ( 3, 0 ), ( 3, 1 ), ( 3, 3 ), ( 3, 4 ) ] |> Set.fromList
+        , walls = [ ( ( 3, 0 ), Wall ), ( ( 3, 1 ), Wall ), ( ( 3, 3 ), Wall ), ( ( 3, 4 ), Wall ) ] |> Dict.fromList
         , boxesStart = [ ( 5, 2 ) ] |> Set.fromList
         , exit =
             { position = ( 7, 0 )
@@ -387,7 +427,7 @@ viewLevel moveActions level timeline currentTime =
         ( w, h ) =
             Level.levelSize level
 
-        walls : Set Point
+        walls : Dict Point WallType
         walls =
             Level.getWalls level
 
@@ -654,19 +694,23 @@ drawParadox currentTime tileParadoxes =
 
 
 drawWallsAndDoorBackground position maybeDoor walls =
-    if Set.member position walls then
-        Element.Background.color (Element.rgb 0 0 0)
+    case Dict.get position walls of
+        Just Wall ->
+            Element.Background.color (Element.rgb 0 0 0)
 
-    else
-        case maybeDoor of
-            Just True ->
-                Element.Background.color (Element.rgb 0.8 0.8 0.8)
+        Just Glass ->
+            Element.Background.color (Element.rgb 0.9 0.9 0.8)
 
-            Just False ->
-                Element.Background.color (Element.rgb 0.4 0.4 0.4)
+        Nothing ->
+            case maybeDoor of
+                Just True ->
+                    Element.Background.color (Element.rgb 0.8 0.8 0.8)
 
-            Nothing ->
-                Element.Background.color (Element.rgb 1 1 1)
+                Just False ->
+                    Element.Background.color (Element.rgb 0.4 0.4 0.4)
+
+                Nothing ->
+                    Element.Background.color (Element.rgb 1 1 1)
 
 
 drawLaserBeam : Point -> Set LaserInstant -> List (Element.Attribute msg)
