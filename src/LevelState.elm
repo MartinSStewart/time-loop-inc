@@ -7,6 +7,7 @@ module LevelState exposing
     , PlayerInstant
     , canMakeMove
     , currentPlayerTime
+    , directionOffset
     , doors
     , getLaserBeams
     , getTimelineInstant

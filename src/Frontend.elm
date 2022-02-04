@@ -20,6 +20,7 @@ import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Maybe.Extra as Maybe
 import Point exposing (Point)
+import StringExtra as String
 import Types exposing (..)
 import Url exposing (Url)
 
@@ -38,7 +39,7 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    [ newLevel, levelIntro, level0, level1, level2 ]
+    [ levelIntro, level0, level1, level2 ]
         --[ level2 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
@@ -313,6 +314,7 @@ updateLoaded msg model =
                             setMoveActions
                                 (model.moveActions |> List.reverse |> List.drop 1 |> List.reverse)
                                 { model | targetTime = Nothing }
+                                |> (\a -> { a | viewTime = getCurrentTime a a.timelineCache |> toFloat })
 
                         _ ->
                             case maybeMoveAction2 of
@@ -378,7 +380,8 @@ updateLoaded msg model =
                 )
               of
                 ( head :: rest, True ) ->
-                    { model | currentLevel = head, futureLevels = rest, moveActions = [] }
+                    { model | currentLevel = head, futureLevels = rest, viewTime = 0 }
+                        |> setMoveActions []
 
                 _ ->
                     model
@@ -398,7 +401,7 @@ updateLoaded msg model =
                     let
                         stepSize : Float
                         stepSize =
-                            0.05
+                            0.15
 
                         targetTime : Float
                         targetTime =
@@ -483,6 +486,9 @@ viewLevel model =
         current : LevelInstant
         current =
             LevelState.getTimelineInstant model.currentLevel currentTimeInt model.timelineCache
+
+        t =
+            model.viewTime - toFloat currentTimeInt |> T
 
         doors : List DoorInstant
         doors =
@@ -654,9 +660,9 @@ viewLevel model =
             )
         |> Element.row
             (List.gatherEqualsBy .position current.players
-                |> List.map
+                |> List.concatMap
                     (\( { position, age }, rest ) ->
-                        drawPlayers position (Nonempty age (List.map .age rest)) model
+                        drawPlayers t position (Nonempty age (List.map .age rest)) model
                     )
             )
 
@@ -666,27 +672,79 @@ tileSize =
     50
 
 
-drawPlayers : Point -> Nonempty Int -> Loaded_ -> Element.Attribute msg
-drawPlayers ( x, y ) ages model =
-    Element.row
-        [ (x * tileSize + 16) |> toFloat |> Element.moveRight
-        , (y * tileSize + 15) |> toFloat |> Element.moveDown
-        ]
-        [ Element.el
-            [ if List.Nonempty.any ((==) (List.length model.moveActions)) ages then
-                Element.Font.bold
+type T
+    = T Float
 
-              else
-                Element.Font.regular
+
+toFrom : Float -> Float -> T -> Float
+toFrom start end (T t) =
+    (end - start) * t + start
+
+
+tToFloat : T -> Float
+tToFloat (T t) =
+    t
+
+
+drawPlayers : T -> Point -> Nonempty Int -> Loaded_ -> List (Element.Attribute msg)
+drawPlayers t ( x, y ) ages model =
+    if t == T 0 then
+        [ Element.row
+            [ (x * tileSize + 16) |> toFloat |> Element.moveRight
+            , (y * tileSize + 15) |> toFloat |> Element.moveDown
             ]
-            (Element.text "P")
-        , List.Nonempty.toList ages
-            |> List.map String.fromInt
-            |> String.join "&"
-            |> Element.text
-            |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
+            [ Element.el
+                [ if List.Nonempty.any ((==) (List.length model.moveActions)) ages then
+                    Element.Font.bold
+
+                  else
+                    Element.Font.regular
+                ]
+                (Element.text "P")
+            , List.Nonempty.toList ages
+                |> List.map String.fromInt
+                |> String.join "&"
+                |> Element.text
+                |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
+            ]
+            |> Element.inFront
         ]
-        |> Element.inFront
+
+    else
+        List.Nonempty.toList ages
+            |> List.map
+                (\age ->
+                    let
+                        ( moveX, moveY ) =
+                            List.getAt age model.moveActions
+                                |> Maybe.withDefault Nothing
+                                |> LevelState.directionOffset
+                                |> Point.scale tileSize
+                    in
+                    Element.row
+                        [ (x * tileSize + 16)
+                            |> toFloat
+                            |> (+) (toFrom 0 (toFloat moveX) t)
+                            |> Element.moveRight
+                        , (y * tileSize + 15)
+                            |> toFloat
+                            |> (+) (toFrom 0 (toFloat moveY) t)
+                            |> Element.moveDown
+                        ]
+                        [ Element.el
+                            [ if List.Nonempty.any ((==) (List.length model.moveActions)) ages then
+                                Element.Font.bold
+
+                              else
+                                Element.Font.regular
+                            ]
+                            (Element.text "P")
+                        , String.removeTrailing0s 1 (toFloat age + tToFloat t)
+                            |> Element.text
+                            |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
+                        ]
+                        |> Element.inFront
+                )
 
 
 drawLaser : Point -> List Laser -> List (Element.Attribute msg)
