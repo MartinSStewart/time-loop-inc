@@ -4,6 +4,7 @@ module LevelState exposing
     , LaserBeam
     , LevelInstant
     , Paradox
+    , PlayerInstant
     , canMakeMove
     , currentPlayerTime
     , doors

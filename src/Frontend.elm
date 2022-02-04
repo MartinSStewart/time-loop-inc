@@ -3,7 +3,7 @@ module Frontend exposing (..)
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Browser
-import Browser.Dom
+import Browser.Events
 import Browser.Navigation
 import Dict as RegularDict
 import Element exposing (Element)
@@ -15,12 +15,11 @@ import Element.Keyed
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
-import LevelState exposing (Direction(..), DoorInstant, LaserBeam, LevelInstant, Paradox)
+import LevelState exposing (Direction(..), DoorInstant, LaserBeam, LevelInstant, Paradox, PlayerInstant)
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Maybe.Extra as Maybe
 import Point exposing (Point)
-import Task
 import Types exposing (..)
 import Url exposing (Url)
 
@@ -204,26 +203,37 @@ level2 =
 
 init : Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
 init _ navigationKey =
-    ( { navigationKey = navigationKey } |> initLoaded
+    ( Loading { navigationKey = navigationKey, time = Nothing }
     , Cmd.none
     )
 
 
 initLoaded : Loading_ -> FrontendModel
 initLoaded loading =
-    case maybeLevels of
-        Just levels ->
+    case ( maybeLevels, loading.time ) of
+        ( Just levels, Just time ) ->
             { navigationKey = loading.navigationKey
             , moveActions = []
-            , currentTime = Nothing
+            , targetTime = Nothing
+            , viewTime = 0
             , keys = []
+            , timelineCache = LevelState.timeline (List.Nonempty.head levels) []
             , futureLevels = List.Nonempty.tail levels
             , currentLevel = List.Nonempty.head levels
+            , time = time
             }
                 |> Loaded
 
-        Nothing ->
+        ( Just _, _ ) ->
+            Loading loading
+
+        ( Nothing, _ ) ->
             LoadingFailed { error = "All levels failed to load" }
+
+
+setMoveActions : List (Maybe Direction) -> Loaded_ -> Loaded_
+setMoveActions moveActions loaded_ =
+    { loaded_ | moveActions = moveActions, timelineCache = LevelState.timeline loaded_.currentLevel moveActions }
 
 
 
@@ -234,7 +244,12 @@ update : FrontendMsg -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
 update msg model =
     case model of
         Loading loading ->
-            ( Loading loading, Cmd.none )
+            case msg of
+                AnimationFrame time ->
+                    ( initLoaded { loading | time = Just time }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         Loaded loaded ->
             updateLoaded msg loaded |> Tuple.mapFirst Loaded
@@ -258,33 +273,8 @@ updateLoaded msg model =
                 keyPressed key =
                     keyDown key && (List.any ((==) key) model.keys |> not)
 
-                model_ =
-                    case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
-                        ( True, True ) ->
-                            { model
-                                | moveActions =
-                                    model.moveActions |> List.reverse |> List.drop 1 |> List.reverse
-                                , currentTime = Nothing
-                            }
-
-                        _ ->
-                            model
-
-                maybeTimeAdjust =
-                    if keyPressed (Keyboard.Character "Q") then
-                        Just -1
-
-                    else if keyPressed (Keyboard.Character "E") then
-                        Just 1
-
-                    else
-                        Nothing
-
-                timeline =
-                    LevelState.timeline model.currentLevel model.moveActions
-
                 maybeMoveAction =
-                    if LevelState.isCompleted model.currentLevel timeline model.moveActions then
+                    if LevelState.isCompleted model.currentLevel model.timelineCache model.moveActions then
                         Nothing
 
                     else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
@@ -308,7 +298,7 @@ updateLoaded msg model =
                 maybeMoveAction2 =
                     case maybeMoveAction of
                         Just action_ ->
-                            if LevelState.canMakeMove model.currentLevel timeline model.moveActions action_ then
+                            if LevelState.canMakeMove model.currentLevel model.timelineCache model.moveActions action_ then
                                 Just action_
 
                             else
@@ -316,25 +306,51 @@ updateLoaded msg model =
 
                         Nothing ->
                             Nothing
+
+                model_ =
+                    case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
+                        ( True, True ) ->
+                            setMoveActions
+                                (model.moveActions |> List.reverse |> List.drop 1 |> List.reverse)
+                                { model | targetTime = Nothing }
+
+                        _ ->
+                            case maybeMoveAction2 of
+                                Just moveAction2 ->
+                                    setMoveActions
+                                        (model.moveActions ++ [ moveAction2 ])
+                                        { model | targetTime = Nothing }
+
+                                Nothing ->
+                                    model
+
+                maybeTimeAdjust =
+                    if keyPressed (Keyboard.Character "Q") then
+                        Just -1
+
+                    else if keyPressed (Keyboard.Character "E") then
+                        Just 1
+
+                    else
+                        Nothing
             in
             ( { model_
                 | keys = newKeys
-                , moveActions = model_.moveActions ++ Maybe.toList maybeMoveAction2
-                , currentTime =
+                , targetTime =
                     case maybeMoveAction2 of
                         Just _ ->
                             Nothing
 
                         Nothing ->
-                            case ( maybeTimeAdjust, model_.currentTime ) of
+                            case ( maybeTimeAdjust, model_.targetTime ) of
                                 ( Just timeAdjust, Just currentTime ) ->
                                     currentTime + timeAdjust |> Just
 
                                 ( Just timeAdjust, Nothing ) ->
-                                    LevelState.currentPlayerTime timeline model.moveActions + timeAdjust |> Just
+                                    LevelState.currentPlayerTime model_.timelineCache model_.moveActions + timeAdjust |> Just
 
                                 ( Nothing, _ ) ->
-                                    model_.currentTime
+                                    model_.targetTime
               }
             , Cmd.none
             )
@@ -351,20 +367,6 @@ updateLoaded msg model =
 
         UrlChanged url ->
             ( model, Cmd.none )
-
-        PressedTimeMinus ->
-            let
-                currentTime =
-                    getCurrentTime model (LevelState.timeline model.currentLevel model.moveActions)
-            in
-            ( { model | currentTime = currentTime - 1 |> Just }, Cmd.none )
-
-        PressedTimePlus ->
-            let
-                currentTime =
-                    getCurrentTime model (LevelState.timeline model.currentLevel model.moveActions)
-            in
-            ( { model | currentTime = currentTime + 1 |> Just }, Cmd.none )
 
         PressedNextLevel ->
             ( case
@@ -384,10 +386,40 @@ updateLoaded msg model =
             )
 
         DraggedTimelineSlider newTime ->
-            ( { model | currentTime = Just newTime }, Cmd.none )
+            ( { model | viewTime = newTime }, Cmd.none )
 
         SliderLostFocus ->
             ( model, Cmd.none )
+
+        AnimationFrame time ->
+            ( { model
+                | time = time
+                , viewTime =
+                    let
+                        stepSize : Float
+                        stepSize =
+                            0.05
+
+                        targetTime : Float
+                        targetTime =
+                            case model.targetTime of
+                                Just targetTime_ ->
+                                    toFloat targetTime_
+
+                                Nothing ->
+                                    getCurrentTime model model.timelineCache |> toFloat
+                    in
+                    if targetTime > model.viewTime + stepSize then
+                        model.viewTime + stepSize
+
+                    else if targetTime < model.viewTime - stepSize then
+                        model.viewTime - stepSize
+
+                    else
+                        targetTime
+              }
+            , Cmd.none
+            )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
@@ -421,19 +453,19 @@ view model =
     }
 
 
-viewLevel : List (Maybe Direction) -> Level -> RegularDict.Dict Int LevelInstant -> Int -> Element msg
-viewLevel moveActions level timeline currentTime =
+viewLevel : Loaded_ -> Element msg
+viewLevel model =
     let
         ( w, h ) =
-            Level.levelSize level
+            Level.levelSize model.currentLevel
 
         walls : Dict Point WallType
         walls =
-            Level.getWalls level
+            Level.getWalls model.currentLevel
 
         portals : List { timeDelta : Int, portal : Portal }
         portals =
-            Level.portalPairs level
+            Level.portalPairs model.currentLevel
                 |> List.concatMap
                     (\portalPair ->
                         [ { timeDelta = portalPair.timeDelta, portal = portalPair.firstPortal }
@@ -443,26 +475,29 @@ viewLevel moveActions level timeline currentTime =
 
         paradoxes : List Paradox
         paradoxes =
-            LevelState.paradoxes level timeline
+            LevelState.paradoxes model.currentLevel model.timelineCache
+
+        currentTimeInt =
+            floor model.viewTime
 
         current : LevelInstant
         current =
-            LevelState.getTimelineInstant level currentTime timeline
+            LevelState.getTimelineInstant model.currentLevel currentTimeInt model.timelineCache
 
         doors : List DoorInstant
         doors =
-            LevelState.doors level current
+            LevelState.doors model.currentLevel current
 
         exit =
-            Level.exit level
+            Level.exit model.currentLevel
 
         laserBeams : Set LaserBeam
         laserBeams =
-            LevelState.getLaserBeams level timeline currentTime
+            LevelState.getLaserBeams model.currentLevel model.timelineCache currentTimeInt
 
         lasers : List Level.Laser
         lasers =
-            Level.lasers level
+            Level.lasers model.currentLevel
     in
     List.range 0 (w - 1)
         |> List.map
@@ -512,11 +547,11 @@ viewLevel moveActions level timeline currentTime =
                                             Nothing
                             in
                             Element.el
-                                (Element.width (Element.px 50)
-                                    :: Element.height (Element.px 50)
+                                (Element.width (Element.px tileSize)
+                                    :: Element.height (Element.px tileSize)
                                     :: Element.Font.center
                                     :: Element.Border.width 1
-                                    :: drawParadox currentTime tileParadoxes
+                                    :: drawParadox currentTimeInt tileParadoxes
                                     :: (Element.el
                                             [ Element.Border.widthEach
                                                 { left = borderWidth LeftEdge
@@ -545,95 +580,113 @@ viewLevel moveActions level timeline currentTime =
                                     :: drawLaser position lasers
                                     ++ drawLaserBeam position laserBeams
                                 )
-                                (case List.filter (\player -> player.position == position) current.players of
-                                    [] ->
-                                        if List.any (\box -> box.position == position) current.boxes then
-                                            Element.el
-                                                [ Element.centerX
-                                                , Element.centerY
-                                                , Element.Font.size 30
-                                                ]
-                                                (Element.text "▨")
+                                (if List.any (\box -> box.position == position) current.boxes then
+                                    Element.el
+                                        [ Element.centerX
+                                        , Element.centerY
+                                        , Element.Font.size 30
+                                        ]
+                                        (Element.text "▨")
 
-                                        else if maybeDoor == Just True then
-                                            Element.column
-                                                [ Element.Font.size 14
-                                                , Element.centerY
-                                                , Element.Font.center
-                                                , Element.width Element.fill
-                                                ]
-                                                [ Element.el [ Element.centerX ] (Element.text "Open")
-                                                , Element.el [ Element.centerX ] (Element.text "door")
-                                                ]
+                                 else if maybeDoor == Just True then
+                                    Element.column
+                                        [ Element.Font.size 14
+                                        , Element.centerY
+                                        , Element.Font.center
+                                        , Element.width Element.fill
+                                        ]
+                                        [ Element.el [ Element.centerX ] (Element.text "Open")
+                                        , Element.el [ Element.centerX ] (Element.text "door")
+                                        ]
 
-                                        else if maybeDoor == Just False then
-                                            Element.column
-                                                [ Element.Font.size 14
-                                                , Element.centerY
-                                                , Element.width Element.fill
-                                                , Element.Font.color (Element.rgb 0.8 0.8 0.8)
-                                                ]
-                                                [ Element.el [ Element.centerX ] (Element.text "Closed")
-                                                , Element.el [ Element.centerX ] (Element.text "door")
-                                                ]
+                                 else if maybeDoor == Just False then
+                                    Element.column
+                                        [ Element.Font.size 14
+                                        , Element.centerY
+                                        , Element.width Element.fill
+                                        , Element.Font.color (Element.rgb 0.8 0.8 0.8)
+                                        ]
+                                        [ Element.el [ Element.centerX ] (Element.text "Closed")
+                                        , Element.el [ Element.centerX ] (Element.text "door")
+                                        ]
 
-                                        else
-                                            case List.head localPortals of
-                                                Just ( timeDelta, _ ) ->
-                                                    (if timeDelta < 0 then
-                                                        "t" ++ String.fromInt timeDelta
+                                 else
+                                    case List.head localPortals of
+                                        Just ( timeDelta, _ ) ->
+                                            (if timeDelta < 0 then
+                                                "t" ++ String.fromInt timeDelta
 
-                                                     else
-                                                        "t+" ++ String.fromInt timeDelta
-                                                    )
-                                                        |> Element.text
-                                                        |> Element.el
-                                                            [ Element.Font.size 12
-                                                            , Element.centerX
-                                                            , Element.centerY
-                                                            ]
-
-                                                Nothing ->
-                                                    if Level.exit level |> .position |> (==) (Point.new x y) then
-                                                        Element.el
-                                                            [ Element.centerX
-                                                            , Element.centerY
-                                                            , Element.Font.size 14
-                                                            ]
-                                                            (Element.text "Exit")
-
-                                                    else if Level.doors level |> List.any (.buttonPosition >> (==) (Point.new x y)) then
-                                                        Element.el
-                                                            [ Element.centerX
-                                                            , Element.centerY
-                                                            , Element.Font.size 14
-                                                            ]
-                                                            (Element.text "B")
-
-                                                    else
-                                                        Element.none
-
-                                    players ->
-                                        Element.row
-                                            [ Element.centerX, Element.centerY ]
-                                            [ Element.el
-                                                [ if List.any (.age >> (==) (List.length moveActions)) players then
-                                                    Element.Font.bold
-
-                                                  else
-                                                    Element.Font.regular
-                                                ]
-                                                (Element.text "P")
-                                            , List.map (.age >> String.fromInt) players
-                                                |> String.join "&"
+                                             else
+                                                "t+" ++ String.fromInt timeDelta
+                                            )
                                                 |> Element.text
-                                                |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
-                                            ]
+                                                |> Element.el
+                                                    [ Element.Font.size 12
+                                                    , Element.centerX
+                                                    , Element.centerY
+                                                    ]
+
+                                        Nothing ->
+                                            if Level.exit model.currentLevel |> .position |> (==) (Point.new x y) then
+                                                Element.el
+                                                    [ Element.centerX
+                                                    , Element.centerY
+                                                    , Element.Font.size 14
+                                                    ]
+                                                    (Element.text "Exit")
+
+                                            else if
+                                                Level.doors model.currentLevel
+                                                    |> List.any (.buttonPosition >> (==) (Point.new x y))
+                                            then
+                                                Element.el
+                                                    [ Element.centerX
+                                                    , Element.centerY
+                                                    , Element.Font.size 14
+                                                    ]
+                                                    (Element.text "B")
+
+                                            else
+                                                Element.none
                                 )
                         )
                     |> Element.column []
             )
-        |> Element.row []
+        |> Element.row
+            (List.gatherEqualsBy .position current.players
+                |> List.map
+                    (\( { position, age }, rest ) ->
+                        drawPlayers position (Nonempty age (List.map .age rest)) model
+                    )
+            )
+
+
+tileSize : Int
+tileSize =
+    50
+
+
+drawPlayers : Point -> Nonempty Int -> Loaded_ -> Element.Attribute msg
+drawPlayers ( x, y ) ages model =
+    Element.row
+        [ (x * tileSize + 16) |> toFloat |> Element.moveRight
+        , (y * tileSize + 15) |> toFloat |> Element.moveDown
+        ]
+        [ Element.el
+            [ if List.Nonempty.any ((==) (List.length model.moveActions)) ages then
+                Element.Font.bold
+
+              else
+                Element.Font.regular
+            ]
+            (Element.text "P")
+        , List.Nonempty.toList ages
+            |> List.map String.fromInt
+            |> String.join "&"
+            |> Element.text
+            |> Element.el [ Element.Font.size 12, Element.moveDown 6 ]
+        ]
+        |> Element.inFront
 
 
 drawLaser : Point -> List Laser -> List (Element.Attribute msg)
@@ -669,6 +722,7 @@ drawLaser position lasers =
         lasers
 
 
+drawParadox : Int -> List Paradox -> Element.Attribute msg
 drawParadox currentTime tileParadoxes =
     (if List.isEmpty tileParadoxes then
         Element.none
@@ -749,7 +803,7 @@ getCurrentTime :
     -> RegularDict.Dict Int LevelInstant
     -> Int
 getCurrentTime model timeline =
-    case model.currentTime of
+    case model.targetTime of
         Just currentTime_ ->
             currentTime_
 
@@ -760,21 +814,15 @@ getCurrentTime model timeline =
 viewLoaded : Loaded_ -> Element FrontendMsg
 viewLoaded model =
     let
-        timeline =
-            LevelState.timeline model.currentLevel model.moveActions
-
-        viewTime =
-            getCurrentTime model timeline
-
         paradoxes : List Paradox
         paradoxes =
-            LevelState.paradoxes model.currentLevel timeline
+            LevelState.paradoxes model.currentLevel model.timelineCache
     in
     Element.column
         [ Element.padding 16, Element.spacing 8, Element.width Element.fill ]
-        [ viewLevel model.moveActions model.currentLevel timeline viewTime
-        , slider viewTime (LevelState.currentPlayerTime timeline model.moveActions) paradoxes timeline
-        , if LevelState.isCompleted model.currentLevel timeline model.moveActions then
+        [ viewLevel model
+        , slider model.viewTime (LevelState.currentPlayerTime model.timelineCache model.moveActions) paradoxes model.timelineCache
+        , if LevelState.isCompleted model.currentLevel model.timelineCache model.moveActions then
             Element.row
                 [ Element.spacing 16 ]
                 [ Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
@@ -816,7 +864,7 @@ viewLoaded model =
         ]
 
 
-slider : Int -> Int -> List Paradox -> RegularDict.Dict Int LevelInstant -> Element FrontendMsg
+slider : Float -> Int -> List Paradox -> RegularDict.Dict Int LevelInstant -> Element FrontendMsg
 slider viewTime playerTime paradoxes timeline =
     let
         minTime =
@@ -847,13 +895,13 @@ slider viewTime playerTime paradoxes timeline =
                                 , Element.Font.size 14
                                 , Element.Border.widthEach { left = 1, right = 1, top = 1, bottom = 1 }
                                 , (if List.any (.time >> (==) time) paradoxes then
-                                    if viewTime == time then
+                                    if viewTime >= toFloat time && viewTime < toFloat time + 1 then
                                         Element.rgb 1 0.1 0.1
 
                                     else
                                         Element.rgb 0.8 0 0
 
-                                   else if viewTime == time then
+                                   else if viewTime >= toFloat time && viewTime < toFloat time + 1 then
                                     Element.rgb 0.7 0.7 0.7
 
                                    else
@@ -861,7 +909,7 @@ slider viewTime playerTime paradoxes timeline =
                                   )
                                     |> Element.Background.color
                                 , Element.above
-                                    (if minTime == time || maxTime == time || viewTime == time || playerTime == time || modBy 5 time == 0 then
+                                    (if minTime == time || maxTime == time || playerTime == time || modBy 5 time == 0 then
                                         Element.el [ Element.moveRight 8 ] (Element.text (String.fromInt time))
 
                                      else
@@ -879,12 +927,12 @@ slider viewTime playerTime paradoxes timeline =
                         [ Element.width Element.fill, Element.height Element.fill, Element.paddingXY 5 0 ]
                     |> Element.behindContent
                 ]
-                { onChange = round >> DraggedTimelineSlider
+                { onChange = DraggedTimelineSlider
                 , noOp = SliderLostFocus
                 , label = Element.Input.labelLeft [] (Element.text "Timeline")
                 , min = toFloat minTime
                 , max = toFloat maxTime
-                , value = toFloat viewTime
+                , value = viewTime
                 , thumb =
                     Element.Input.thumb
                         [ Element.width (Element.px 10)
@@ -894,7 +942,7 @@ slider viewTime playerTime paradoxes timeline =
                         , Element.Border.width 1
                         , Element.Border.color (Element.rgb 0.3 0.3 0.3)
                         ]
-                , step = Just 1
+                , step = Just 0.01
                 }
           )
         ]
@@ -921,4 +969,5 @@ subscriptions : FrontendModel -> Sub FrontendMsg
 subscriptions model =
     Sub.batch
         [ Sub.map KeyMsg Keyboard.subscriptions
+        , Browser.Events.onAnimationFrame AnimationFrame
         ]
