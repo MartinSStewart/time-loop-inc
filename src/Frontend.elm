@@ -1004,14 +1004,12 @@ slider viewTime playerTime paradoxes timeline =
             RegularDict.keys timeline
                 |> List.minimum
                 |> Maybe.withDefault 0
-                |> (\a -> 5 * ((a - 4) // 5))
 
         maxTime =
             RegularDict.keys timeline
                 |> List.maximum
                 |> Maybe.withDefault 0
-                |> max (minTime + 1)
-                |> (\a -> 5 + 5 * (a // 5))
+                |> max (minTime + 5)
     in
     Element.Keyed.column
         [ Element.width <| Element.maximum 900 (Element.px (70 * (maxTime - minTime))), Element.paddingXY 0 8 ]

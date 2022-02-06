@@ -92,8 +92,9 @@ test0 () =
             LevelState.timeline level moveActions
 
         expected =
-            [ ( 1, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
-            , ( 0, { boxes = [ { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
+            [ ( 0, { boxes = [ { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
+            , ( 1, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 1, position = ( 2, 1 ) } ] } )
+            , ( 2, { boxes = [ { position = ( 3, 1 ) } ], players = [ { age = 2, position = ( 2, 1 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
@@ -140,6 +141,7 @@ test3 () =
             [ ( 0, { boxes = [ { position = ( 0, 2 ) }, { position = ( 2, 1 ) } ], players = [ { age = 0, position = ( 1, 1 ) } ] } )
             , ( 1, { boxes = [ { position = ( 1, 2 ) }, { position = ( 3, 1 ) } ], players = [ { age = 3, position = ( 0, 2 ) }, { age = 1, position = ( 2, 1 ) } ] } )
             , ( 2, { boxes = [ { position = ( 1, 2 ) } ], players = [ { age = 4, position = ( 0, 2 ) }, { age = 2, position = ( 3, 1 ) } ] } )
+            , ( 3, { boxes = [ { position = ( 1, 2 ) } ], players = [ { age = 5, position = ( 0, 2 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
@@ -185,6 +187,7 @@ test1 () =
         expected =
             [ ( 0, { boxes = [], players = [ { age = 2, position = ( 0, 2 ) }, { age = 0, position = ( 3, 3 ) } ] } )
             , ( 1, { boxes = [], players = [ { age = 3, position = ( 1, 2 ) }, { age = 1, position = ( 4, 3 ) } ] } )
+            , ( 2, { boxes = [], players = [ { age = 4, position = ( 1, 2 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
@@ -243,6 +246,7 @@ test2 () =
             , ( 2, { boxes = [], players = [] } )
             , ( 3, { boxes = [], players = [ { age = 2, position = ( 4, 3 ) } ] } )
             , ( 4, { boxes = [], players = [ { age = 3, position = ( 3, 3 ) } ] } )
+            , ( 5, { boxes = [], players = [ { age = 4, position = ( 3, 3 ) } ] } )
             ]
                 |> RegularDict.fromList
     in
@@ -290,6 +294,7 @@ test4 () =
             , ( 1, { boxes = [], players = [ { age = 2, position = ( 0, 2 ) }, { age = 1, position = ( 3, 1 ) } ] } )
             , ( 2, { boxes = [], players = [] } )
             , ( 3, { boxes = [], players = [ { age = 3, position = ( 3, 1 ) } ] } )
+            , ( 4, { boxes = [], players = [ { age = 4, position = ( 3, 1 ) } ] } )
             ]
                 |> RegularDict.fromList
     in

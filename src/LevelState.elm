@@ -680,7 +680,9 @@ timelineHelper level timeline_ futureItems currentTime mode moveActions =
                         timelineHelper level timeline_ futureItems 0 BoxTimeTravel moveActions
 
                     BoxTimeTravel ->
-                        timeline_
+                        step level timeline_ currentTime moveActions [] (getTimelineInstant level currentTime timeline_)
+                            |> .nextInstant
+                            |> (\nextInstant_ -> RegularDict.insert (currentTime + 1) nextInstant_ timeline_)
 
             else
                 timelineHelper
