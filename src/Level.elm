@@ -89,7 +89,10 @@ blocksLasers (Level level) position =
         Just Glass ->
             False
 
-        _ ->
+        Just Wall ->
+            True
+
+        Nothing ->
             Point.clamp
                 (Point.new 0 0)
                 (Point.add (Point.new -1 -1) level.levelSize)

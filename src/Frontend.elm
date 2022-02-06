@@ -39,8 +39,7 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    [ levelIntro, level0, level2, laserLevel1, laserLevel2, level1 ]
-        --[ level2 ]
+    [ laserLevel3, levelIntro, level0, level2, laserLevel1, laserLevel2, level1 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
 
@@ -88,6 +87,31 @@ laserLevel2 =
         , lasers =
             [ { position = ( 3, 4 ), tileEdge = BottomEdge }
             , { position = ( 0, 0 ), tileEdge = LeftEdge }
+            ]
+        }
+
+
+laserLevel3 =
+    Level.init
+        { playerStart = ( 4, 5 )
+        , walls =
+            [ ( ( 3, 2 ), Wall ) ]
+                |> Dict.fromList
+        , boxesStart = [ ( 2, 2 ), ( 1, 2 ), ( 4, 4 ) ] |> Set.fromList
+        , exit =
+            { position = ( 7, 7 )
+            , tileEdge = BottomEdge
+            }
+        , levelSize = ( 8, 8 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 5, 7 ), tileEdge = BottomEdge }
+              , secondPortal = { position = ( 3, 3 ), tileEdge = TopEdge }
+              , timeDelta = 20
+              }
+            ]
+        , doors = []
+        , lasers =
+            [ { position = ( 3, 7 ), tileEdge = BottomEdge }
             ]
         }
 
@@ -488,7 +512,14 @@ view model =
     }
 
 
-viewLevel : Loaded_ -> Element msg
+viewLevel :
+    { a
+        | currentLevel : Level
+        , timelineCache : RegularDict.Dict Int LevelInstant
+        , viewTime : Float
+        , moveActions : List (Maybe Direction)
+    }
+    -> Element msg
 viewLevel model =
     let
         ( w, h ) =
@@ -694,7 +725,7 @@ viewLevel model =
             (List.gatherEqualsBy .position current.players
                 |> List.concatMap
                     (\( { position, age }, rest ) ->
-                        drawPlayers t position (Nonempty age (List.map .age rest)) model
+                        drawPlayers t position (Nonempty age (List.map .age rest)) model.moveActions
                     )
             )
 
@@ -718,15 +749,15 @@ tToFloat (T t) =
     t
 
 
-drawPlayers : T -> Point -> Nonempty Int -> Loaded_ -> List (Element.Attribute msg)
-drawPlayers t ( x, y ) ages model =
+drawPlayers : T -> Point -> Nonempty Int -> List (Maybe Direction) -> List (Element.Attribute msg)
+drawPlayers t ( x, y ) ages moveActions =
     if t == T 0 then
         [ Element.row
             [ (x * tileSize + 16) |> toFloat |> Element.moveRight
             , (y * tileSize + 15) |> toFloat |> Element.moveDown
             ]
             [ Element.el
-                [ if List.Nonempty.any ((==) (List.length model.moveActions)) ages then
+                [ if List.Nonempty.any ((==) (List.length moveActions)) ages then
                     Element.Font.bold
 
                   else
@@ -748,7 +779,7 @@ drawPlayers t ( x, y ) ages model =
                 (\age ->
                     let
                         ( moveX, moveY ) =
-                            List.getAt age model.moveActions
+                            List.getAt age moveActions
                                 |> Maybe.withDefault Nothing
                                 |> LevelState.directionOffset
                                 |> Point.scale tileSize
@@ -764,7 +795,7 @@ drawPlayers t ( x, y ) ages model =
                             |> Element.moveDown
                         ]
                         [ Element.el
-                            [ if List.Nonempty.any ((==) (List.length model.moveActions)) ages then
+                            [ if List.Nonempty.any ((==) (List.length moveActions)) ages then
                                 Element.Font.bold
 
                               else

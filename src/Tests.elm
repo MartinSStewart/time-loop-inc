@@ -1,12 +1,13 @@
 module Tests exposing (..)
 
+import AssocList as Dict
 import AssocSet as Set
 import Dict as RegularDict
 import Element exposing (Element)
 import Element.Font
 import Frontend
 import Html exposing (Html)
-import Level exposing (Level, TileEdge(..))
+import Level exposing (Level, TileEdge(..), WallType(..))
 import LevelState exposing (Direction(..), LevelInstant)
 
 
@@ -69,7 +70,7 @@ test0 () =
         level =
             Level.init
                 { playerStart = ( 1, 1 )
-                , walls = [ ( 0, 0 ), ( 0, 1 ) ] |> Set.fromList
+                , walls = [ ( ( 0, 0 ), Wall ), ( ( 0, 1 ), Wall ) ] |> Dict.fromList
                 , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
                 , exit =
                     { position = ( 3, 1 )
@@ -83,6 +84,7 @@ test0 () =
                       }
                     ]
                 , doors = []
+                , lasers = []
                 }
                 |> unwrapResult
 
@@ -113,7 +115,7 @@ test3 () =
         level =
             Level.init
                 { playerStart = ( 1, 1 )
-                , walls = [ ( 0, 0 ), ( 0, 1 ), ( 4, 1 ) ] |> Set.fromList
+                , walls = [ ( ( 0, 0 ), Wall ), ( ( 0, 1 ), Wall ), ( ( 4, 1 ), Wall ) ] |> Dict.fromList
                 , boxesStart = [ ( 2, 1 ) ] |> Set.fromList
                 , exit =
                     { position = ( 3, 5 )
@@ -127,6 +129,7 @@ test3 () =
                       }
                     ]
                 , doors = []
+                , lasers = []
                 }
                 |> unwrapResult
 
@@ -158,7 +161,7 @@ test1 () =
         level =
             Level.init
                 { playerStart = ( 3, 3 )
-                , walls = [] |> Set.fromList
+                , walls = [] |> Dict.fromList
                 , boxesStart = [] |> Set.fromList
                 , exit =
                     { position = ( 3, 1 )
@@ -172,6 +175,7 @@ test1 () =
                       }
                     ]
                 , doors = []
+                , lasers = []
                 }
                 |> unwrapResult
 
@@ -212,7 +216,7 @@ test2 () =
         level =
             Level.init
                 { playerStart = ( 1, 2 )
-                , walls = [] |> Set.fromList
+                , walls = [] |> Dict.fromList
                 , boxesStart = [] |> Set.fromList
                 , exit =
                     { position = ( 3, 1 )
@@ -226,6 +230,7 @@ test2 () =
                       }
                     ]
                 , doors = []
+                , lasers = []
                 }
                 |> unwrapResult
 
@@ -259,7 +264,7 @@ test4 () =
         level =
             Level.init
                 { playerStart = ( 2, 1 )
-                , walls = [] |> Set.fromList
+                , walls = [] |> Dict.fromList
                 , boxesStart = [] |> Set.fromList
                 , exit =
                     { position = ( 3, 5 )
@@ -273,6 +278,7 @@ test4 () =
                       }
                     ]
                 , doors = []
+                , lasers = []
                 }
                 |> unwrapResult
 
@@ -300,7 +306,15 @@ showInstants : Level -> RegularDict.Dict Int LevelInstant -> Element msg
 showInstants level dict =
     RegularDict.keys dict
         |> List.sort
-        |> List.map (Frontend.viewLevel level dict)
+        |> List.map
+            (\time ->
+                Frontend.viewLevel
+                    { currentLevel = level
+                    , timelineCache = dict
+                    , viewTime = toFloat time
+                    , moveActions = []
+                    }
+            )
         |> Element.row [ Element.spacing 8 ]
 
 
