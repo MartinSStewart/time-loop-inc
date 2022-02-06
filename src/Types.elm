@@ -48,6 +48,8 @@ type FrontendMsg
     | UrlChanged Url
     | KeyMsg Keyboard.Msg
     | PressedNextLevel
+    | PressedSkipLevel
+    | PressedResetLevel
     | DraggedTimelineSlider Float
     | SliderLostFocus
     | AnimationFrame Time.Posix

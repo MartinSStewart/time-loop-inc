@@ -39,40 +39,56 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    [ levelIntro, level0, level1, level2 ]
+    [ levelIntro, level0, level2, laserLevel1, laserLevel2, level1 ]
         --[ level2 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
 
 
-newLevel =
+laserLevel1 =
     Level.init
-        { playerStart = ( 3, 3 )
+        { playerStart = ( 0, 2 )
         , walls =
-            [ ( ( 1, 1 ), Wall )
-            , ( ( 0, 2 ), Wall )
-            , ( ( 0, 3 ), Wall )
-            , ( ( 0, 4 ), Wall )
-            , ( ( 4, 2 ), Wall )
-            , ( ( 4, 3 ), Wall )
-            , ( ( 4, 4 ), Wall )
-            , ( ( 4, 0 ), Glass )
-            ]
+            []
                 |> Dict.fromList
-        , boxesStart = [ ( 5, 1 ) ] |> Set.fromList
+        , boxesStart = [ ( 2, 3 ) ] |> Set.fromList
         , exit =
-            { position = ( 6, 5 )
+            { position = ( 7, 4 )
             , tileEdge = BottomEdge
             }
-        , levelSize = ( 8, 6 )
+        , levelSize = ( 8, 5 )
         , portalPairs =
-            [ { firstPortal = { position = ( 5, 5 ), tileEdge = BottomEdge }
-              , secondPortal = { position = ( 7, 0 ), tileEdge = RightEdge }
-              , timeDelta = -6
+            []
+        , doors = []
+        , lasers =
+            [ { position = ( 3, 4 ), tileEdge = BottomEdge }
+            ]
+        }
+
+
+laserLevel2 =
+    Level.init
+        { playerStart = ( 0, 2 )
+        , walls =
+            []
+                |> Dict.fromList
+        , boxesStart = [ ( 2, 3 ) ] |> Set.fromList
+        , exit =
+            { position = ( 7, 4 )
+            , tileEdge = BottomEdge
+            }
+        , levelSize = ( 8, 5 )
+        , portalPairs =
+            [ { firstPortal = { position = ( 5, 4 ), tileEdge = BottomEdge }
+              , secondPortal = { position = ( 3, 0 ), tileEdge = TopEdge }
+              , timeDelta = -10
               }
             ]
         , doors = []
-        , lasers = [ { position = ( 0, 0 ), tileEdge = LeftEdge } ]
+        , lasers =
+            [ { position = ( 3, 4 ), tileEdge = BottomEdge }
+            , { position = ( 0, 0 ), tileEdge = LeftEdge }
+            ]
         }
 
 
@@ -388,8 +404,24 @@ updateLoaded msg model =
             , Cmd.none
             )
 
+        PressedSkipLevel ->
+            ( case model.futureLevels of
+                head :: rest ->
+                    { model | currentLevel = head, futureLevels = rest, viewTime = 0 }
+                        |> setMoveActions []
+
+                _ ->
+                    model
+            , Cmd.none
+            )
+
+        PressedResetLevel ->
+            ( setMoveActions [] { model | viewTime = 0 }
+            , Cmd.none
+            )
+
         DraggedTimelineSlider newTime ->
-            ( { model | viewTime = newTime }, Cmd.none )
+            ( { model | viewTime = newTime, targetTime = Just (round newTime) }, Cmd.none )
 
         SliderLostFocus ->
             ( model, Cmd.none )
@@ -881,17 +913,27 @@ viewLoaded model =
         [ viewLevel model
         , slider model.viewTime (LevelState.currentPlayerTime model.timelineCache model.moveActions) paradoxes model.timelineCache
         , if LevelState.isCompleted model.currentLevel model.timelineCache model.moveActions then
-            Element.row
+            Element.Keyed.row
                 [ Element.spacing 16 ]
-                [ Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!")
-                , if List.isEmpty model.futureLevels then
-                    Element.text "No more levels :("
+                [ ( "a", Element.el [ Element.Font.color (Element.rgb 0 0.8 0) ] (Element.text "Level complete!") )
+                , ( "b"
+                  , if List.isEmpty model.futureLevels then
+                        Element.text "No more levels :("
 
-                  else
-                    button buttonAttributes { onPress = PressedNextLevel, label = Element.text "Next level" }
+                    else
+                        button buttonAttributes { onPress = PressedNextLevel, label = Element.text "Next level" }
+                  )
                 ]
 
-          else if List.isEmpty paradoxes then
+          else if List.isEmpty model.futureLevels then
+            Element.none
+
+          else
+            Element.Keyed.row [ Element.spacing 16 ]
+                [ ( "c", button buttonAttributes { onPress = PressedResetLevel, label = Element.text "Reset level" } )
+                , ( "d", button buttonAttributes { onPress = PressedSkipLevel, label = Element.text "Skip level" } )
+                ]
+        , if List.isEmpty paradoxes then
             Element.none
 
           else
@@ -900,10 +942,12 @@ viewLoaded model =
                 |> Element.el [ Element.Font.color (Element.rgb 1 0 0) ]
         , Element.column
             []
-            [ Element.paragraph [] [ Element.text "You control the P character. Move with arrow keys or WASD. Press space to wait 1 turn." ] ]
-        , Element.column
-            []
-            [ Element.paragraph [] [ Element.text "E increments view time and Q decrements view time." ] ]
+            [ Element.paragraph []
+                [ Element.text "You control the "
+                , Element.el [ Element.Font.bold ] (Element.text "P")
+                , Element.text " character. Move with arrow keys or WASD. Press space to wait 1 turn."
+                ]
+            ]
         , Element.column
             []
             [ Element.paragraph [] [ Element.text "Undo moves with ctrl+z" ] ]
@@ -935,11 +979,11 @@ slider viewTime playerTime paradoxes timeline =
             RegularDict.keys timeline
                 |> List.maximum
                 |> Maybe.withDefault 0
-                |> max (minTime + 5)
+                |> max (minTime + 1)
                 |> (\a -> 5 + 5 * (a // 5))
     in
     Element.Keyed.column
-        [ Element.width Element.fill, Element.paddingXY 0 8 ]
+        [ Element.width <| Element.maximum 900 (Element.px (70 * (maxTime - minTime))), Element.paddingXY 0 8 ]
         [ ( String.fromInt playerTime
           , Element.Input.slider
                 [ Element.width Element.fill
@@ -990,7 +1034,7 @@ slider viewTime playerTime paradoxes timeline =
                 , label = Element.Input.labelLeft [] (Element.text "Timeline")
                 , min = toFloat minTime
                 , max = toFloat maxTime
-                , value = viewTime
+                , value = clamp (toFloat minTime) (toFloat maxTime) viewTime
                 , thumb =
                     Element.Input.thumb
                         [ Element.width (Element.px 10)
@@ -1009,7 +1053,6 @@ slider viewTime playerTime paradoxes timeline =
 buttonAttributes =
     [ Element.padding 8
     , Element.Background.color (Element.rgb 0.7 0.7 0.7)
-    , Element.alignRight
     , Element.Font.center
     ]
 
