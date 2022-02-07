@@ -18,7 +18,6 @@ import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
 import LevelState exposing (Direction(..), DoorInstant, LaserBeam, LevelInstant, Paradox, PlayerInstant)
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
-import Maybe.Extra as Maybe
 import Point exposing (Point)
 import StringExtra as String
 import Types exposing (..)
@@ -39,7 +38,7 @@ app =
 
 maybeLevels : Maybe (Nonempty Level)
 maybeLevels =
-    [ laserLevel3, levelIntro, level0, level2, laserLevel1, laserLevel2, level1 ]
+    [ levelIntro, level0, level2, laserLevel1, laserLevel2, level1 ]
         |> List.filterMap Result.toMaybe
         |> List.Nonempty.fromList
 
