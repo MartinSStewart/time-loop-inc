@@ -1,4 +1,4 @@
-module Level exposing (Door, Laser, Level, Portal, PortalPair, TileEdge(..), WallType(..), blocksLasers, blocksMovement, boxesStart, doors, exit, getWalls, init, lasers, levelSize, playerStart, portalPairs)
+module Level exposing (Door, Exit, Laser, Level, Portal, PortalPair, TileEdge(..), WallType(..), blocksLasers, blocksMovement, boxesStart, doors, exit, getWalls, init, lasers, levelSize, playerStart, portalPairs, unsafe)
 
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
@@ -6,10 +6,10 @@ import Point exposing (Point)
 
 
 type Level
-    = Level Level_
+    = Level LevelData
 
 
-type alias Level_ =
+type alias LevelData =
     { playerStart : Point
     , walls : Dict Point WallType
     , boxesStart : Set Point
@@ -43,13 +43,18 @@ portalPairs (Level level) =
     level.portalPairs
 
 
-init : Level_ -> Result String Level
+init : LevelData -> Result String Level
 init level =
     if boxesValid level then
         Level level |> Ok
 
     else
         Err "Failed to create level"
+
+
+unsafe : LevelData -> Level
+unsafe levelData =
+    Level levelData
 
 
 lasers : Level -> List Laser
@@ -115,7 +120,7 @@ levelSize (Level level) =
     level.levelSize
 
 
-boxesValid : Level_ -> Bool
+boxesValid : LevelData -> Bool
 boxesValid level =
     level.boxesStart |> Set.intersect (Dict.keys level.walls |> Set.fromList) |> Set.size |> (==) 0
 

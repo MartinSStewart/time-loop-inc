@@ -4,6 +4,7 @@ import Browser exposing (UrlRequest)
 import Browser.Dom
 import Browser.Navigation exposing (Key)
 import Dict as RegularDict
+import Editor
 import Keyboard
 import Level exposing (Level)
 import LevelState exposing (Direction, LevelInstant)
@@ -24,14 +25,25 @@ type alias Loading_ =
 
 type alias Loaded_ =
     { navigationKey : Key
-    , moveActions : List (Maybe Direction)
+    , page : Page
+    , keys : List Keyboard.Key
+    , previousKeys : List Keyboard.Key
+    , time : Time.Posix
+    }
+
+
+type Page
+    = GamePage Game
+    | EditorPage Editor.Model
+
+
+type alias Game =
+    { moveActions : List (Maybe Direction)
     , targetTime : Maybe Int
     , viewTime : Float
-    , keys : List Keyboard.Key
     , timelineCache : RegularDict.Dict Int LevelInstant
     , futureLevels : List Level
     , currentLevel : Level
-    , time : Time.Posix
     }
 
 
@@ -47,12 +59,18 @@ type FrontendMsg
     = UrlClicked UrlRequest
     | UrlChanged Url
     | KeyMsg Keyboard.Msg
-    | PressedNextLevel
+    | GameMsg GameMsg
+    | EditorMsg Editor.Msg
+    | AnimationFrame Time.Posix
+    | PressedGotoEditor
+
+
+type GameMsg
+    = PressedNextLevel
     | PressedSkipLevel
     | PressedResetLevel
     | DraggedTimelineSlider Float
     | SliderLostFocus
-    | AnimationFrame Time.Posix
 
 
 type ToBackend

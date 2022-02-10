@@ -6,6 +6,7 @@ import Browser
 import Browser.Events
 import Browser.Navigation
 import Dict as RegularDict
+import Editor
 import Element exposing (Element)
 import Element.Background
 import Element.Border
@@ -20,6 +21,7 @@ import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Point exposing (Point)
 import StringExtra as String
+import Time
 import Types exposing (..)
 import Url exposing (Url)
 
@@ -253,14 +255,10 @@ initLoaded loading =
     case ( maybeLevels, loading.time ) of
         ( Just levels, Just time ) ->
             { navigationKey = loading.navigationKey
-            , moveActions = []
-            , targetTime = Nothing
-            , viewTime = 0
-            , keys = []
-            , timelineCache = LevelState.timeline (List.Nonempty.head levels) []
-            , futureLevels = List.Nonempty.tail levels
-            , currentLevel = List.Nonempty.head levels
+            , page = GamePage (initGame levels)
             , time = time
+            , keys = []
+            , previousKeys = []
             }
                 |> Loaded
 
@@ -271,7 +269,18 @@ initLoaded loading =
             LoadingFailed { error = "All levels failed to load" }
 
 
-setMoveActions : List (Maybe Direction) -> Loaded_ -> Loaded_
+initGame : Nonempty Level -> Game
+initGame levels =
+    { moveActions = []
+    , targetTime = Nothing
+    , viewTime = 0
+    , timelineCache = LevelState.timeline (List.Nonempty.head levels) []
+    , futureLevels = List.Nonempty.tail levels
+    , currentLevel = List.Nonempty.head levels
+    }
+
+
+setMoveActions : List (Maybe Direction) -> Game -> Game
 setMoveActions moveActions loaded_ =
     { loaded_ | moveActions = moveActions, timelineCache = LevelState.timeline loaded_.currentLevel moveActions }
 
@@ -306,93 +315,15 @@ updateLoaded msg model =
                 newKeys =
                     Keyboard.update keyMsg model.keys
 
-                keyDown key =
-                    List.any ((==) key) newKeys
-
-                keyPressed : Keyboard.Key -> Bool
-                keyPressed key =
-                    keyDown key && (List.any ((==) key) model.keys |> not)
-
-                maybeMoveAction =
-                    if LevelState.isCompleted model.currentLevel model.timelineCache model.moveActions then
-                        Nothing
-
-                    else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
-                        Just (Just Left)
-
-                    else if keyPressed Keyboard.ArrowRight || keyPressed (Keyboard.Character "D") then
-                        Just (Just Right)
-
-                    else if keyPressed Keyboard.ArrowUp || keyPressed (Keyboard.Character "W") then
-                        Just (Just Up)
-
-                    else if keyPressed Keyboard.ArrowDown || keyPressed (Keyboard.Character "S") then
-                        Just (Just Down)
-
-                    else if keyPressed Keyboard.Spacebar then
-                        Just Nothing
-
-                    else
-                        Nothing
-
-                maybeMoveAction2 =
-                    case maybeMoveAction of
-                        Just action_ ->
-                            if LevelState.canMakeMove model.currentLevel model.timelineCache model.moveActions action_ then
-                                Just action_
-
-                            else
-                                Nothing
-
-                        Nothing ->
-                            Nothing
-
-                model_ =
-                    case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
-                        ( True, True ) ->
-                            setMoveActions
-                                (model.moveActions |> List.reverse |> List.drop 1 |> List.reverse)
-                                { model | targetTime = Nothing }
-                                |> (\a -> { a | viewTime = getCurrentTime a a.timelineCache |> toFloat })
-
-                        _ ->
-                            case maybeMoveAction2 of
-                                Just moveAction2 ->
-                                    setMoveActions
-                                        (model.moveActions ++ [ moveAction2 ])
-                                        { model | targetTime = Nothing }
-
-                                Nothing ->
-                                    model
-
-                maybeTimeAdjust =
-                    if keyPressed (Keyboard.Character "Q") then
-                        Just -1
-
-                    else if keyPressed (Keyboard.Character "E") then
-                        Just 1
-
-                    else
-                        Nothing
+                newModel =
+                    { model | keys = newKeys, previousKeys = model.keys }
             in
-            ( { model_
-                | keys = newKeys
-                , targetTime =
-                    case maybeMoveAction2 of
-                        Just _ ->
-                            Nothing
+            ( case model.page of
+                GamePage game ->
+                    { newModel | page = keyUpdate newModel game |> GamePage }
 
-                        Nothing ->
-                            case ( maybeTimeAdjust, model_.targetTime ) of
-                                ( Just timeAdjust, Just currentTime ) ->
-                                    currentTime + timeAdjust |> Just
-
-                                ( Just timeAdjust, Nothing ) ->
-                                    LevelState.currentPlayerTime model_.timelineCache model_.moveActions + timeAdjust |> Just
-
-                                ( Nothing, _ ) ->
-                                    model_.targetTime
-              }
+                EditorPage editor ->
+                    { model | page = editor |> EditorPage }
             , Cmd.none
             )
 
@@ -409,75 +340,198 @@ updateLoaded msg model =
         UrlChanged url ->
             ( model, Cmd.none )
 
+        GameMsg gameMsg ->
+            ( case model.page of
+                GamePage game ->
+                    { model | page = updateGame gameMsg game |> GamePage }
+
+                _ ->
+                    model
+            , Cmd.none
+            )
+
+        EditorMsg editorMsg ->
+            ( case model.page of
+                EditorPage editor ->
+                    { model | page = Editor.update editorMsg editor |> EditorPage }
+
+                _ ->
+                    model
+            , Cmd.none
+            )
+
+        AnimationFrame time ->
+            ( case model.page of
+                GamePage game ->
+                    { model | page = gameAnimationFrame time game |> GamePage }
+
+                EditorPage editor ->
+                    { model | page = editor |> EditorPage }
+            , Cmd.none
+            )
+
+        PressedGotoEditor ->
+            ( { model | page = Editor.init |> EditorPage }
+            , Cmd.none
+            )
+
+
+keyUpdate : Loaded_ -> Game -> Game
+keyUpdate loaded model =
+    let
+        keyDown key =
+            List.any ((==) key) loaded.keys
+
+        keyPressed : Keyboard.Key -> Bool
+        keyPressed key =
+            keyDown key && (List.any ((==) key) loaded.previousKeys |> not)
+
+        maybeMoveAction =
+            if LevelState.isCompleted model.currentLevel model.timelineCache model.moveActions then
+                Nothing
+
+            else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
+                Just (Just Left)
+
+            else if keyPressed Keyboard.ArrowRight || keyPressed (Keyboard.Character "D") then
+                Just (Just Right)
+
+            else if keyPressed Keyboard.ArrowUp || keyPressed (Keyboard.Character "W") then
+                Just (Just Up)
+
+            else if keyPressed Keyboard.ArrowDown || keyPressed (Keyboard.Character "S") then
+                Just (Just Down)
+
+            else if keyPressed Keyboard.Spacebar then
+                Just Nothing
+
+            else
+                Nothing
+
+        maybeMoveAction2 =
+            case maybeMoveAction of
+                Just action_ ->
+                    if LevelState.canMakeMove model.currentLevel model.timelineCache model.moveActions action_ then
+                        Just action_
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+
+        model_ =
+            case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
+                ( True, True ) ->
+                    setMoveActions
+                        (model.moveActions |> List.reverse |> List.drop 1 |> List.reverse)
+                        { model | targetTime = Nothing }
+                        |> (\a -> { a | viewTime = getCurrentTime a a.timelineCache |> toFloat })
+
+                _ ->
+                    case maybeMoveAction2 of
+                        Just moveAction2 ->
+                            setMoveActions
+                                (model.moveActions ++ [ moveAction2 ])
+                                { model | targetTime = Nothing }
+
+                        Nothing ->
+                            model
+
+        maybeTimeAdjust =
+            if keyPressed (Keyboard.Character "Q") then
+                Just -1
+
+            else if keyPressed (Keyboard.Character "E") then
+                Just 1
+
+            else
+                Nothing
+    in
+    { model_
+        | targetTime =
+            case maybeMoveAction2 of
+                Just _ ->
+                    Nothing
+
+                Nothing ->
+                    case ( maybeTimeAdjust, model_.targetTime ) of
+                        ( Just timeAdjust, Just currentTime ) ->
+                            currentTime + timeAdjust |> Just
+
+                        ( Just timeAdjust, Nothing ) ->
+                            LevelState.currentPlayerTime model_.timelineCache model_.moveActions + timeAdjust |> Just
+
+                        ( Nothing, _ ) ->
+                            model_.targetTime
+    }
+
+
+gameAnimationFrame : Time.Posix -> Game -> Game
+gameAnimationFrame time model =
+    { model
+        | viewTime =
+            let
+                stepSize : Float
+                stepSize =
+                    0.15
+
+                targetTime : Float
+                targetTime =
+                    case model.targetTime of
+                        Just targetTime_ ->
+                            toFloat targetTime_
+
+                        Nothing ->
+                            getCurrentTime model model.timelineCache |> toFloat
+            in
+            if targetTime > model.viewTime + stepSize then
+                model.viewTime + stepSize
+
+            else if targetTime < model.viewTime - stepSize then
+                model.viewTime - stepSize
+
+            else
+                targetTime
+    }
+
+
+updateGame : GameMsg -> Game -> Game
+updateGame msg model =
+    case msg of
         PressedNextLevel ->
-            ( case
+            case
                 ( model.futureLevels
                 , LevelState.isCompleted
                     model.currentLevel
                     (LevelState.timeline model.currentLevel model.moveActions)
                     model.moveActions
                 )
-              of
+            of
                 ( head :: rest, True ) ->
                     { model | currentLevel = head, futureLevels = rest, viewTime = 0 }
                         |> setMoveActions []
 
                 _ ->
                     model
-            , Cmd.none
-            )
 
         PressedSkipLevel ->
-            ( case model.futureLevels of
+            case model.futureLevels of
                 head :: rest ->
                     { model | currentLevel = head, futureLevels = rest, viewTime = 0 }
                         |> setMoveActions []
 
                 _ ->
                     model
-            , Cmd.none
-            )
 
         PressedResetLevel ->
-            ( setMoveActions [] { model | viewTime = 0 }
-            , Cmd.none
-            )
+            setMoveActions [] { model | viewTime = 0 }
 
         DraggedTimelineSlider newTime ->
-            ( { model | viewTime = newTime, targetTime = Just (round newTime) }, Cmd.none )
+            { model | viewTime = newTime, targetTime = Just (round newTime) }
 
         SliderLostFocus ->
-            ( model, Cmd.none )
-
-        AnimationFrame time ->
-            ( { model
-                | time = time
-                , viewTime =
-                    let
-                        stepSize : Float
-                        stepSize =
-                            0.15
-
-                        targetTime : Float
-                        targetTime =
-                            case model.targetTime of
-                                Just targetTime_ ->
-                                    toFloat targetTime_
-
-                                Nothing ->
-                                    getCurrentTime model model.timelineCache |> toFloat
-                    in
-                    if targetTime > model.viewTime + stepSize then
-                        model.viewTime + stepSize
-
-                    else if targetTime < model.viewTime - stepSize then
-                        model.viewTime - stepSize
-
-                    else
-                        targetTime
-              }
-            , Cmd.none
-            )
+            model
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
@@ -502,7 +556,20 @@ view model =
                     Element.none
 
                 Loaded loaded ->
-                    viewLoaded loaded
+                    case loaded.page of
+                        GamePage game ->
+                            Element.column
+                                []
+                                [ viewGame game |> Element.map GameMsg
+                                , button
+                                    buttonAttributes
+                                    { onPress = PressedGotoEditor
+                                    , label = Element.text "Go to level editor"
+                                    }
+                                ]
+
+                        EditorPage editor ->
+                            Editor.view editor |> Element.map EditorMsg
 
                 LoadingFailed { error } ->
                     Element.text error
@@ -919,7 +986,7 @@ drawLaserBeam position lasers =
 
 
 getCurrentTime :
-    Loaded_
+    Game
     -> RegularDict.Dict Int LevelInstant
     -> Int
 getCurrentTime model timeline =
@@ -931,8 +998,8 @@ getCurrentTime model timeline =
             LevelState.currentPlayerTime timeline model.moveActions
 
 
-viewLoaded : Loaded_ -> Element FrontendMsg
-viewLoaded model =
+viewGame : Game -> Element GameMsg
+viewGame model =
     let
         paradoxes : List Paradox
         paradoxes =
@@ -996,7 +1063,7 @@ viewLoaded model =
         ]
 
 
-slider : Float -> Int -> List Paradox -> RegularDict.Dict Int LevelInstant -> Element FrontendMsg
+slider : Float -> Int -> List Paradox -> RegularDict.Dict Int LevelInstant -> Element GameMsg
 slider viewTime playerTime paradoxes timeline =
     let
         minTime =
