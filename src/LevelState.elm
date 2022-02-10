@@ -282,10 +282,13 @@ isCompleted level timeline_ moveActions =
                 currentTime =
                     currentPlayerTime timeline_ moveActions
 
+                totalMoveActions =
+                    List.length moveActions
+
                 currentPlayer =
                     getTimelineInstant level currentTime timeline_
                         |> .players
-                        |> List.find (\player -> player.age == List.length moveActions)
+                        |> List.find (\player -> player.age == totalMoveActions)
 
                 exit =
                     Level.exit level
@@ -420,13 +423,34 @@ getLaserBeams level timeline_ currentTime =
         currentInstant =
             getTimelineInstant level currentTime timeline_
 
-        boxes : Set Point
-        boxes =
-            currentInstant.boxes |> List.map .position |> Set.fromList
+        getObstacles : LevelInstant -> Set Point
+        getObstacles instant =
+            let
+                closedDoors : Set Point
+                closedDoors =
+                    doors level currentInstant
+                        |> List.filterMap
+                            (\a ->
+                                if a.isOpen then
+                                    Just a.door.doorPosition
+
+                                else
+                                    Nothing
+                            )
+                        |> Set.fromList
+            in
+            instant.boxes
+                |> List.map .position
+                |> Set.fromList
+                |> Set.union closedDoors
+
+        obstacles : Set Point
+        obstacles =
+            getObstacles currentInstant
 
         helper : Point -> Direction -> Set LaserBeam -> Set LaserBeam
         helper position direction set =
-            if Set.member position boxes || Level.blocksLasers level position then
+            if Set.member position obstacles || Level.blocksLasers level position then
                 set
 
             else
@@ -474,10 +498,10 @@ getLaserBeams level timeline_ currentTime =
         reachesLaser : List PortalHelper -> Int -> Point -> Direction -> Bool
         reachesLaser portals_ time position direction =
             let
-                boxes_ =
-                    getTimelineInstant level time timeline_ |> .boxes
+                obstacles_ =
+                    getTimelineInstant level time timeline_ |> getObstacles
             in
-            if Level.blocksLasers level position || List.any (.position >> (==) position) boxes_ then
+            if Set.member position obstacles_ || Level.blocksLasers level position then
                 False
 
             else
