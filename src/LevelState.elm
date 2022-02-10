@@ -401,7 +401,14 @@ doors level instant =
                 |> Set.fromList
     in
     Level.doors level
-        |> List.map (\door -> { door = door, isOpen = Set.member door.buttonPosition positions })
+        |> List.map
+            (\door ->
+                { door = door
+                , isOpen =
+                    Set.member door.buttonPosition positions
+                        || List.any (.position >> (==) door.buttonPosition) instant.players
+                }
+            )
 
 
 type alias Paradox =
@@ -432,10 +439,10 @@ getLaserBeams level timeline_ currentTime =
                         |> List.filterMap
                             (\a ->
                                 if a.isOpen then
-                                    Just a.door.doorPosition
+                                    Nothing
 
                                 else
-                                    Nothing
+                                    Just a.door.doorPosition
                             )
                         |> Set.fromList
             in

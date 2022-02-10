@@ -32,6 +32,8 @@ type Tool
     | EraseTool
     | LaserTool
     | PortalTool (Maybe Portal)
+    | DoorTool (Maybe Point)
+    | ExitTool
 
 
 type alias Model =
@@ -154,7 +156,12 @@ handlePointerDown pointerPosition model level =
         BoxTool ->
             ( BoxTool
             , { level
-                | boxesStart = Set.insert gridPosition level.boxesStart
+                | boxesStart =
+                    if Set.member gridPosition level.boxesStart then
+                        Set.remove gridPosition level.boxesStart
+
+                    else
+                        Set.insert gridPosition level.boxesStart
                 , playerStart =
                     if Just gridPosition == level.playerStart then
                         Nothing
@@ -195,6 +202,26 @@ handlePointerDown pointerPosition model level =
                 Nothing ->
                     ( PortalTool (Just nextPortal), level )
 
+        DoorTool maybeDoorPosition ->
+            case maybeDoorPosition of
+                Just doorPosition ->
+                    ( DoorTool Nothing
+                    , { level
+                        | doors =
+                            { doorPosition = doorPosition, buttonPosition = gridPosition } :: level.doors
+                      }
+                    )
+
+                Nothing ->
+                    ( DoorTool (Just gridPosition), level )
+
+        ExitTool ->
+            let
+                exit =
+                    { position = gridPosition, tileEdge = pointToTileEdge pointerPosition }
+            in
+            ( ExitTool, { level | exit = Just exit } )
+
 
 eraseTile : Point -> Level -> Level
 eraseTile gridPosition level =
@@ -214,6 +241,16 @@ eraseTile gridPosition level =
                     firstPortal.position /= gridPosition && secondPortal.position /= gridPosition
                 )
                 level.portalPairs
+        , doors =
+            List.filter
+                (\{ doorPosition, buttonPosition } -> doorPosition /= gridPosition && buttonPosition /= gridPosition)
+                level.doors
+        , exit =
+            if Just gridPosition == Maybe.map .position level.exit then
+                Nothing
+
+            else
+                level.exit
     }
 
 
@@ -251,6 +288,12 @@ handlePointerMove gridPosition tool level =
             level
 
         PortalTool _ ->
+            level
+
+        DoorTool _ ->
+            level
+
+        ExitTool ->
             level
 
 
@@ -298,38 +341,40 @@ view model =
 
 toolbarView : Tool -> Element Msg
 toolbarView tool =
+    let
+        toolButton : Tool -> String -> Element Msg
+        toolButton select label =
+            Element.Input.button
+                [ Element.Background.color
+                    (if sameTool tool select then
+                        Element.rgb 0.8 0.9 1
+
+                     else
+                        Element.rgb 0.8 0.8 0.8
+                    )
+                , Element.Border.width 1
+                , Element.padding 4
+                ]
+                { onPress = Just (PressedSelectTool select)
+                , label = Element.text label
+                }
+    in
     Element.row
         [ Element.spacing 8
         , Element.padding 4
         , Element.Background.color (Element.rgb 0.9 0.9 0.9)
         , Element.width Element.fill
         ]
-        [ toolButton tool WallTool "Wall"
-        , toolButton tool GlassTool "Glass"
-        , toolButton tool PlayerTool "Player"
-        , toolButton tool BoxTool "Box"
-        , toolButton tool LaserTool "Laser"
-        , toolButton tool (PortalTool Nothing) "Portals"
-        , toolButton tool EraseTool "Erase"
+        [ toolButton WallTool "Wall"
+        , toolButton GlassTool "Glass"
+        , toolButton PlayerTool "Player"
+        , toolButton BoxTool "Box"
+        , toolButton LaserTool "Laser"
+        , toolButton (PortalTool Nothing) "Portals"
+        , toolButton (DoorTool Nothing) "Door"
+        , toolButton EraseTool "Erase"
+        , toolButton ExitTool "Place exit"
         ]
-
-
-toolButton : Tool -> Tool -> String -> Element Msg
-toolButton currentTool tool label =
-    Element.Input.button
-        [ Element.Background.color
-            (if sameTool currentTool tool then
-                Element.rgb 0.8 0.9 1
-
-             else
-                Element.rgb 0.8 0.8 0.8
-            )
-        , Element.Border.width 1
-        , Element.padding 4
-        ]
-        { onPress = Just (PressedSelectTool tool)
-        , label = Element.text label
-        }
 
 
 sameTool : Tool -> Tool -> Bool
@@ -340,6 +385,9 @@ sameTool toolA toolB =
     else
         case ( toolA, toolB ) of
             ( PortalTool _, PortalTool _ ) ->
+                True
+
+            ( DoorTool _, DoorTool _ ) ->
                 True
 
             _ ->
@@ -439,6 +487,16 @@ viewLevel level =
 
                                     else
                                         0
+
+                                maybeDoor =
+                                    case List.find (.doorPosition >> (==) position) level.doors of
+                                        Just { buttonPosition } ->
+                                            (level.playerStart == Just buttonPosition)
+                                                || Set.member buttonPosition level.boxesStart
+                                                |> Just
+
+                                        Nothing ->
+                                            Nothing
                             in
                             Element.el
                                 (Element.width (Element.px tileSize)
@@ -466,7 +524,7 @@ viewLevel level =
                                             Element.none
                                             |> Element.inFront
                                        )
-                                    :: drawWallsAndDoorBackground position walls
+                                    :: drawWallsAndDoorBackground position maybeDoor walls
                                     :: drawLaser position level.lasers
                                     ++ drawLaserBeam position laserBeams
                                 )
@@ -487,6 +545,22 @@ viewLevel level =
                                         ]
                                         (Element.text "P")
 
+                                 else if level.exit |> Maybe.map .position |> (==) (Just position) then
+                                    Element.el
+                                        [ Element.centerX
+                                        , Element.centerY
+                                        , Element.Font.size 14
+                                        ]
+                                        (Element.text "Exit")
+
+                                 else if level.doors |> List.any (.buttonPosition >> (==) (Point.new x y)) then
+                                    Element.el
+                                        [ Element.centerX
+                                        , Element.centerY
+                                        , Element.Font.size 14
+                                        ]
+                                        (Element.text "B")
+
                                  else
                                     Element.none
                                 )
@@ -500,7 +574,7 @@ noPointerEvents =
     Html.Attributes.style "pointer-events" "none" |> Element.htmlAttribute
 
 
-drawWallsAndDoorBackground position walls =
+drawWallsAndDoorBackground position maybeDoor walls =
     case Dict.get position walls of
         Just Wall ->
             Element.Background.color (Element.rgb 0 0 0)
@@ -509,7 +583,15 @@ drawWallsAndDoorBackground position walls =
             Element.Background.color (Element.rgb 0.9 0.9 0.8)
 
         Nothing ->
-            Element.Background.color (Element.rgb 1 1 1)
+            case maybeDoor of
+                Just True ->
+                    Element.Background.color (Element.rgb 0.8 0.8 0.8)
+
+                Just False ->
+                    Element.Background.color (Element.rgb 0.4 0.4 0.4)
+
+                Nothing ->
+                    Element.Background.color (Element.rgb 1 1 1)
 
 
 drawLaserBeam : Point -> Set LaserBeam -> List (Element.Attribute msg)
