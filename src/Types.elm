@@ -1,14 +1,10 @@
 module Types exposing (..)
 
 import Browser exposing (UrlRequest)
-import Browser.Dom
 import Browser.Navigation exposing (Key)
-import Dict as RegularDict
 import Editor
+import Game exposing (Game)
 import Keyboard
-import Level exposing (Level)
-import LevelState exposing (Direction, LevelInstant)
-import List.Nonempty exposing (Nonempty)
 import Time
 import Url exposing (Url)
 
@@ -37,16 +33,6 @@ type Page
     | EditorPage Editor.Model
 
 
-type alias Game =
-    { moveActions : List (Maybe Direction)
-    , targetTime : Maybe Int
-    , viewTime : Float
-    , timelineCache : RegularDict.Dict Int LevelInstant
-    , futureLevels : List Level
-    , currentLevel : Level
-    }
-
-
 type alias LoadingFailed_ =
     { error : String }
 
@@ -59,18 +45,10 @@ type FrontendMsg
     = UrlClicked UrlRequest
     | UrlChanged Url
     | KeyMsg Keyboard.Msg
-    | GameMsg GameMsg
+    | GameMsg Game.Msg
     | EditorMsg Editor.Msg
     | AnimationFrame Time.Posix
     | PressedGotoEditor
-
-
-type GameMsg
-    = PressedNextLevel
-    | PressedSkipLevel
-    | PressedResetLevel
-    | DraggedTimelineSlider Float
-    | SliderLostFocus
 
 
 type ToBackend

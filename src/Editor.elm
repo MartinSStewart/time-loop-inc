@@ -1,18 +1,20 @@
-module Editor exposing (Model, Msg, init, update, view)
+module Editor exposing (Model, Msg, animationFrame, init, keyUpdate, update, view)
 
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
-import Dict as RegularDict
 import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Game exposing (Game)
 import Html.Attributes
 import Html.Events.Extra.Pointer
+import Keyboard exposing (Key)
 import Level exposing (Door, Exit, Laser, Portal, PortalPair, TileEdge(..), WallType(..))
 import LevelState exposing (LaserBeam)
 import List.Extra as List
+import List.Nonempty
 import Point exposing (Point)
 
 
@@ -22,6 +24,9 @@ type Msg
     | PointerMoved Html.Events.Extra.Pointer.Event
     | PointerDown Html.Events.Extra.Pointer.Event
     | PointerUp Html.Events.Extra.Pointer.Event
+    | PressedPlay
+    | GameMsg Game.Msg
+    | PressedBackToEditor
 
 
 type Tool
@@ -41,6 +46,7 @@ type alias Model =
     , pointerPosition : Maybe ( Float, Float )
     , pointerIsDown : Bool
     , level : Level
+    , game : Maybe Game
     }
 
 
@@ -62,6 +68,7 @@ init =
     , pointerPosition = Nothing
     , pointerIsDown = False
     , level = defaultLevel
+    , game = Nothing
     }
 
 
@@ -124,6 +131,65 @@ update msg model =
 
         PointerUp event ->
             { model | pointerPosition = Just event.pointer.offsetPos, pointerIsDown = False }
+
+        PressedPlay ->
+            let
+                level =
+                    model.level
+            in
+            case ( level.playerStart, level.exit ) of
+                ( Just playerStart, Just exit ) ->
+                    case
+                        Level.init
+                            { playerStart = playerStart
+                            , walls = level.walls
+                            , boxesStart = level.boxesStart
+                            , exit = exit
+                            , levelSize = level.levelSize
+                            , portalPairs = level.portalPairs
+                            , doors = level.doors
+                            , lasers = level.lasers
+                            }
+                    of
+                        Ok ok ->
+                            { model | game = Game.init (List.Nonempty.fromElement ok) |> Just }
+
+                        Err _ ->
+                            model
+
+                _ ->
+                    model
+
+        GameMsg gameMsg ->
+            case model.game of
+                Just game ->
+                    { model | game = Game.update gameMsg game |> Just }
+
+                Nothing ->
+                    model
+
+        PressedBackToEditor ->
+            { model | game = Nothing }
+
+
+keyUpdate : { a | keys : List Key, previousKeys : List Key } -> Model -> Model
+keyUpdate keys model =
+    case model.game of
+        Just game ->
+            { model | game = Game.keyUpdate keys game |> Just }
+
+        Nothing ->
+            model
+
+
+animationFrame : Model -> Model
+animationFrame model =
+    case model.game of
+        Just game ->
+            { model | game = Game.animationFrame game |> Just }
+
+        Nothing ->
+            model
 
 
 insideLevel : Point -> Level -> Bool
@@ -332,11 +398,20 @@ pointToTileEdge ( x, y ) =
 
 view : Model -> Element Msg
 view model =
-    Element.column
-        [ Element.width Element.fill, Element.height Element.fill ]
-        [ toolbarView model.tool
-        , levelView model
-        ]
+    case model.game of
+        Just game ->
+            Element.column
+                []
+                [ Game.view game |> Element.map GameMsg
+                , button PressedBackToEditor "Back to editor"
+                ]
+
+        Nothing ->
+            Element.column
+                [ Element.width Element.fill, Element.height Element.fill ]
+                [ toolbarView model.tool
+                , levelView model
+                ]
 
 
 toolbarView : Tool -> Element Msg
@@ -374,7 +449,20 @@ toolbarView tool =
         , toolButton (DoorTool Nothing) "Door"
         , toolButton EraseTool "Erase"
         , toolButton ExitTool "Place exit"
+        , button PressedPlay "Play"
         ]
+
+
+button : msg -> String -> Element msg
+button onPress label =
+    Element.Input.button
+        [ Element.Background.color (Element.rgb 0.8 0.8 0.8)
+        , Element.Border.width 1
+        , Element.padding 4
+        ]
+        { onPress = Just onPress
+        , label = Element.text label
+        }
 
 
 sameTool : Tool -> Tool -> Bool
