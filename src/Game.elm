@@ -20,6 +20,7 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Element.Keyed
+import KeyHelper exposing (KeyState)
 import Keyboard exposing (Key)
 import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
 import LevelState exposing (Direction(..), DoorInstant, LaserBeam, LevelInstant, Paradox)
@@ -64,33 +65,26 @@ setMoveActions moveActions loaded_ =
     { loaded_ | moveActions = moveActions, timelineCache = LevelState.timeline loaded_.currentLevel moveActions }
 
 
-keyUpdate : { a | keys : List Key, previousKeys : List Key } -> Game -> Game
-keyUpdate loaded model =
+keyUpdate : KeyState a -> Game -> Game
+keyUpdate keyState model =
     let
-        keyDown key =
-            List.any ((==) key) loaded.keys
-
-        keyPressed : Keyboard.Key -> Bool
-        keyPressed key =
-            keyDown key && (List.any ((==) key) loaded.previousKeys |> not)
-
         maybeMoveAction =
             if LevelState.isCompleted model.currentLevel model.timelineCache model.moveActions then
                 Nothing
 
-            else if keyPressed Keyboard.ArrowLeft || keyPressed (Keyboard.Character "A") then
+            else if KeyHelper.pressed Keyboard.ArrowLeft keyState || KeyHelper.pressed (Keyboard.Character "A") keyState then
                 Just (Just Left)
 
-            else if keyPressed Keyboard.ArrowRight || keyPressed (Keyboard.Character "D") then
+            else if KeyHelper.pressed Keyboard.ArrowRight keyState || KeyHelper.pressed (Keyboard.Character "D") keyState then
                 Just (Just Right)
 
-            else if keyPressed Keyboard.ArrowUp || keyPressed (Keyboard.Character "W") then
+            else if KeyHelper.pressed Keyboard.ArrowUp keyState || KeyHelper.pressed (Keyboard.Character "W") keyState then
                 Just (Just Up)
 
-            else if keyPressed Keyboard.ArrowDown || keyPressed (Keyboard.Character "S") then
+            else if KeyHelper.pressed Keyboard.ArrowDown keyState || KeyHelper.pressed (Keyboard.Character "S") keyState then
                 Just (Just Down)
 
-            else if keyPressed Keyboard.Spacebar then
+            else if KeyHelper.pressed Keyboard.Spacebar keyState then
                 Just Nothing
 
             else
@@ -109,28 +103,27 @@ keyUpdate loaded model =
                     Nothing
 
         model_ =
-            case ( keyDown Keyboard.Control, keyPressed (Keyboard.Character "Z") ) of
-                ( True, True ) ->
-                    setMoveActions
-                        (model.moveActions |> List.reverse |> List.drop 1 |> List.reverse)
-                        { model | targetTime = Nothing }
-                        |> (\a -> { a | viewTime = getCurrentTime a a.timelineCache |> toFloat })
+            if KeyHelper.undo keyState then
+                setMoveActions
+                    (model.moveActions |> List.reverse |> List.drop 1 |> List.reverse)
+                    { model | targetTime = Nothing }
+                    |> (\a -> { a | viewTime = getCurrentTime a a.timelineCache |> toFloat })
 
-                _ ->
-                    case maybeMoveAction2 of
-                        Just moveAction2 ->
-                            setMoveActions
-                                (model.moveActions ++ [ moveAction2 ])
-                                { model | targetTime = Nothing }
+            else
+                case maybeMoveAction2 of
+                    Just moveAction2 ->
+                        setMoveActions
+                            (model.moveActions ++ [ moveAction2 ])
+                            { model | targetTime = Nothing }
 
-                        Nothing ->
-                            model
+                    Nothing ->
+                        model
 
         maybeTimeAdjust =
-            if keyPressed (Keyboard.Character "Q") then
+            if KeyHelper.pressed (Keyboard.Character "Q") keyState then
                 Just -1
 
-            else if keyPressed (Keyboard.Character "E") then
+            else if KeyHelper.pressed (Keyboard.Character "E") keyState then
                 Just 1
 
             else

@@ -297,7 +297,7 @@ updateLoaded msg model =
                     { newModel | page = Game.keyUpdate newModel game |> GamePage }
 
                 EditorPage editor ->
-                    { model | page = Editor.keyUpdate newModel editor |> EditorPage }
+                    { newModel | page = Editor.keyUpdate newModel editor |> EditorPage }
             , Cmd.none
             )
 

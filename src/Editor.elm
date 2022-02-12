@@ -10,6 +10,7 @@ import Element.Input
 import Game exposing (Game)
 import Html.Attributes
 import Html.Events.Extra.Pointer
+import KeyHelper
 import Keyboard exposing (Key)
 import Level exposing (Door, Exit, Laser, Portal, PortalPair, TileEdge(..), WallType(..))
 import LevelState exposing (LaserBeam)
@@ -46,6 +47,8 @@ type alias Model =
     , pointerPosition : Maybe ( Float, Float )
     , pointerIsDown : Bool
     , level : Level
+    , undoHistory : List Level
+    , redoHistory : List Level
     , game : Maybe Game
     }
 
@@ -68,6 +71,8 @@ init =
     , pointerPosition = Nothing
     , pointerIsDown = False
     , level = defaultLevel
+    , undoHistory = []
+    , redoHistory = []
     , game = Nothing
     }
 
@@ -124,7 +129,12 @@ update msg model =
                     handlePointerDown event.pointer.offsetPos model2 model2.level
             in
             if insideLevel gridPosition model2.level then
-                { model2 | level = level, tool = tool }
+                { model2
+                    | level = level
+                    , tool = tool
+                    , undoHistory = model2.level :: model2.undoHistory
+                    , redoHistory = []
+                }
 
             else
                 model2
@@ -173,13 +183,30 @@ update msg model =
 
 
 keyUpdate : { a | keys : List Key, previousKeys : List Key } -> Model -> Model
-keyUpdate keys model =
+keyUpdate keyState model =
     case model.game of
         Just game ->
-            { model | game = Game.keyUpdate keys game |> Just }
+            { model | game = Game.keyUpdate keyState game |> Just }
 
         Nothing ->
-            model
+            if KeyHelper.undo keyState then
+                case model.undoHistory of
+                    head :: rest ->
+                        { model | undoHistory = rest, level = head, redoHistory = model.level :: model.redoHistory }
+
+                    [] ->
+                        model
+
+            else if KeyHelper.redo keyState then
+                case model.redoHistory of
+                    head :: rest ->
+                        { model | redoHistory = rest, level = head, undoHistory = model.level :: model.undoHistory }
+
+                    [] ->
+                        model
+
+            else
+                model
 
 
 animationFrame : Model -> Model
@@ -261,7 +288,7 @@ handlePointerDown pointerPosition model level =
                     ( PortalTool Nothing
                     , { level
                         | portalPairs =
-                            { timeDelta = 6, firstPortal = portal, secondPortal = nextPortal } :: level.portalPairs
+                            { timeDelta = 14, firstPortal = portal, secondPortal = nextPortal } :: level.portalPairs
                       }
                     )
 
@@ -724,6 +751,7 @@ drawLaser position lasers =
                     (Element.Background.color (Element.rgb 0.5 0.2 0.2)
                         :: Element.width (Element.px 12)
                         :: Element.height (Element.px 12)
+                        :: noPointerEvents
                         :: (case laser.tileEdge of
                                 LeftEdge ->
                                     [ Element.centerY ]
