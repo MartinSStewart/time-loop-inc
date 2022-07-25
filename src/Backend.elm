@@ -58,7 +58,7 @@ updateFromFrontend sessionId clientId msg model =
                             Id.fromInt 1000
             in
             ( { model | savedLevels = Dict.insert newId level model.savedLevels }
-            , Effect.Lamdera.sendToFrontend clientId (EditorToFrontend (Editor.SaveLevelResponse newId |> Debug.log "saved"))
+            , Effect.Lamdera.sendToFrontend clientId (EditorToFrontend (Editor.SaveLevelResponse newId))
             )
 
         LoadLevelRequest id ->
