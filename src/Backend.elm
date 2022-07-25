@@ -1,5 +1,6 @@
 module Backend exposing (..)
 
+import AssocList as Dict
 import Lamdera exposing (ClientId, SessionId)
 import Types exposing (..)
 
@@ -15,7 +16,7 @@ app =
 
 init : ( BackendModel, Cmd BackendMsg )
 init =
-    ( {}
+    ( { savedLevels = Dict.empty }
     , Cmd.none
     )
 

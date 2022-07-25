@@ -1,4 +1,4 @@
-module Editor exposing (Model, Msg, animationFrame, init, keyUpdate, update, view)
+module Editor exposing (Level, Model, Msg, animationFrame, init, keyUpdate, update, view)
 
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
@@ -26,8 +26,10 @@ type Msg
     | PointerDown Html.Events.Extra.Pointer.Event
     | PointerUp Html.Events.Extra.Pointer.Event
     | PressedPlay
+    | PressedSave
     | GameMsg Game.Msg
     | PressedBackToEditor
+    | TypedTimeDelta { portalPairIndex : Int, timeDelta : Int }
 
 
 type Tool
@@ -42,6 +44,14 @@ type Tool
     | ExitTool
 
 
+type ToBackend
+    = SaveLevelRequest Level
+
+
+type ToFrontend
+    = SaveLevelResponse Int
+
+
 type alias Model =
     { tool : Tool
     , pointerPosition : Maybe ( Float, Float )
@@ -49,8 +59,13 @@ type alias Model =
     , level : Level
     , undoHistory : List Level
     , redoHistory : List Level
-    , game : Maybe Game
+    , game : StartGame
     }
+
+
+type StartGame
+    = NotStarted { pressedStart : Bool }
+    | Started Game
 
 
 type alias Level =
@@ -73,7 +88,7 @@ init =
     , level = defaultLevel
     , undoHistory = []
     , redoHistory = []
-    , game = Nothing
+    , game = NotStarted { pressedStart = False }
     }
 
 
@@ -90,21 +105,21 @@ defaultLevel =
     }
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         PressedSelectTool tool ->
-            { model | tool = tool }
+            ( { model | tool = tool }, Cmd.none )
 
         PressedReset ->
-            { model | level = defaultLevel }
+            ( { model | level = defaultLevel }, Cmd.none )
 
         PointerMoved event ->
             let
                 gridPosition =
                     pointToGrid event.pointer.offsetPos
             in
-            { model
+            ( { model
                 | level =
                     if model.pointerIsDown && insideLevel gridPosition model.level then
                         handlePointerMove gridPosition model.tool model.level
@@ -112,7 +127,9 @@ update msg model =
                     else
                         model.level
                 , pointerPosition = Just event.pointer.offsetPos
-            }
+              }
+            , Cmd.none
+            )
 
         PointerDown event ->
             let
@@ -128,67 +145,109 @@ update msg model =
                 ( tool, level ) =
                     handlePointerDown event.pointer.offsetPos model2 model2.level
             in
-            if insideLevel gridPosition model2.level then
-                { model2
-                    | level = level
-                    , tool = tool
-                    , undoHistory = model2.level :: model2.undoHistory
-                    , redoHistory = []
-                }
+            ( if insideLevel gridPosition model2.level then
+                addUndoStep level { model2 | tool = tool }
 
-            else
+              else
                 model2
+            , Cmd.none
+            )
 
         PointerUp event ->
-            { model | pointerPosition = Just event.pointer.offsetPos, pointerIsDown = False }
+            ( { model | pointerPosition = Just event.pointer.offsetPos, pointerIsDown = False }, Cmd.none )
 
         PressedPlay ->
+            ( case validateLevel model.level of
+                Ok ok ->
+                    { model | game = Game.init (List.Nonempty.fromElement ok) |> Started }
+
+                Err _ ->
+                    { model | game = NotStarted { pressedStart = True } }
+            , Cmd.none
+            )
+
+        GameMsg gameMsg ->
+            ( case model.game of
+                Started game ->
+                    { model | game = Game.update gameMsg game |> Started }
+
+                NotStarted _ ->
+                    model
+            , Cmd.none
+            )
+
+        PressedBackToEditor ->
+            ( { model | game = NotStarted { pressedStart = False } }, Cmd.none )
+
+        TypedTimeDelta { portalPairIndex, timeDelta } ->
             let
                 level =
                     model.level
             in
-            case ( level.playerStart, level.exit ) of
-                ( Just playerStart, Just exit ) ->
-                    case
-                        Level.init
-                            { playerStart = playerStart
-                            , walls = level.walls
-                            , boxesStart = level.boxesStart
-                            , exit = exit
-                            , levelSize = level.levelSize
-                            , portalPairs = level.portalPairs
-                            , doors = level.doors
-                            , lasers = level.lasers
-                            }
-                    of
-                        Ok ok ->
-                            { model | game = Game.init (List.Nonempty.fromElement ok) |> Just }
+            ( addUndoStep
+                { level
+                    | portalPairs =
+                        List.updateAt
+                            portalPairIndex
+                            (\portalPair -> { portalPair | timeDelta = timeDelta })
+                            level.portalPairs
+                }
+                model
+            , Cmd.none
+            )
 
-                        Err _ ->
-                            model
+        PressedSave ->
+            ( model, Cmd.none )
 
-                _ ->
-                    model
 
-        GameMsg gameMsg ->
-            case model.game of
-                Just game ->
-                    { model | game = Game.update gameMsg game |> Just }
+validateLevel : Level -> Result String Level.Level
+validateLevel level =
+    case ( level.playerStart, level.exit ) of
+        ( Just playerStart, Just exit ) ->
+            case
+                Level.init
+                    { playerStart = playerStart
+                    , walls = level.walls
+                    , boxesStart = level.boxesStart
+                    , exit = exit
+                    , levelSize = level.levelSize
+                    , portalPairs = level.portalPairs
+                    , doors = level.doors
+                    , lasers = level.lasers
+                    }
+            of
+                Ok ok ->
+                    Ok ok
 
-                Nothing ->
-                    model
+                Err err ->
+                    Err err
 
-        PressedBackToEditor ->
-            { model | game = Nothing }
+        ( Nothing, Just _ ) ->
+            Err "Player missing"
+
+        ( Just _, Nothing ) ->
+            Err "Level exit missing"
+
+        ( Nothing, Nothing ) ->
+            Err "Level exit and player missing"
+
+
+addUndoStep : Level -> Model -> Model
+addUndoStep level model =
+    { model
+        | level = level
+        , undoHistory = model.level :: model.undoHistory
+        , redoHistory = []
+    }
 
 
 keyUpdate : { a | keys : List Key, previousKeys : List Key } -> Model -> Model
 keyUpdate keyState model =
     case model.game of
-        Just game ->
-            { model | game = Game.keyUpdate keyState game |> Just }
+        Started game ->
+            { model | game = Game.keyUpdate keyState game |> Started }
 
-        Nothing ->
+        NotStarted _ ->
             if KeyHelper.undo keyState then
                 case model.undoHistory of
                     head :: rest ->
@@ -212,10 +271,10 @@ keyUpdate keyState model =
 animationFrame : Model -> Model
 animationFrame model =
     case model.game of
-        Just game ->
-            { model | game = Game.animationFrame game |> Just }
+        Started game ->
+            { model | game = Game.animationFrame game |> Started }
 
-        Nothing ->
+        NotStarted _ ->
             model
 
 
@@ -288,7 +347,7 @@ handlePointerDown pointerPosition model level =
                     ( PortalTool Nothing
                     , { level
                         | portalPairs =
-                            { timeDelta = 14, firstPortal = portal, secondPortal = nextPortal } :: level.portalPairs
+                            { timeDelta = 10, firstPortal = portal, secondPortal = nextPortal } :: level.portalPairs
                       }
                     )
 
@@ -426,29 +485,64 @@ pointToTileEdge ( x, y ) =
 view : Model -> Element Msg
 view model =
     case model.game of
-        Just game ->
+        Started game ->
             Element.column
                 []
                 [ Game.view game |> Element.map GameMsg
                 , button PressedBackToEditor "Back to editor"
                 ]
 
-        Nothing ->
+        NotStarted { pressedStart } ->
             Element.column
                 [ Element.width Element.fill, Element.height Element.fill ]
-                [ toolbarView model.tool
+                [ toolbarView pressedStart model
                 , levelView model
+                , portalPairsView model
                 ]
 
 
-toolbarView : Tool -> Element Msg
-toolbarView tool =
+portalPairsView : Model -> Element Msg
+portalPairsView model =
+    if List.isEmpty model.level.portalPairs then
+        Element.none
+
+    else
+        Element.text "Portal pair time deltas"
+            :: List.indexedMap
+                (\index { timeDelta } ->
+                    Element.Input.text
+                        [ Element.padding 4, Element.width (Element.px 50), Element.Font.alignRight ]
+                        { onChange =
+                            \text ->
+                                TypedTimeDelta
+                                    { portalPairIndex = index
+                                    , timeDelta =
+                                        if text == "" then
+                                            0
+
+                                        else
+                                            String.toInt text |> Maybe.withDefault timeDelta
+                                    }
+                        , label =
+                            ("Pair " ++ String.fromInt (index + 1))
+                                |> Element.text
+                                |> Element.Input.labelLeft []
+                        , text = String.fromInt timeDelta
+                        , placeholder = Nothing
+                        }
+                )
+                model.level.portalPairs
+            |> Element.column [ Element.padding 8, Element.spacing 4 ]
+
+
+toolbarView : Bool -> Model -> Element Msg
+toolbarView pressedStart model =
     let
         toolButton : Tool -> String -> Element Msg
         toolButton select label =
             Element.Input.button
                 [ Element.Background.color
-                    (if sameTool tool select then
+                    (if sameTool model.tool select then
                         Element.rgb 0.8 0.9 1
 
                      else
@@ -476,8 +570,26 @@ toolbarView tool =
         , toolButton (DoorTool Nothing) "Door"
         , toolButton EraseTool "Erase"
         , toolButton ExitTool "Place exit"
+        , verticalLine
         , button PressedPlay "Play"
+        , case ( pressedStart, validateLevel model.level ) of
+            ( True, Err error ) ->
+                Element.el [ Element.Font.color (Element.rgb 1 0 0) ] (Element.text error)
+
+            _ ->
+                Element.none
+        , verticalLine
+        , button PressedSave "Save"
         ]
+
+
+verticalLine =
+    Element.el
+        [ Element.height Element.fill
+        , Element.width (Element.px 1)
+        , Element.Background.color (Element.rgb 0 0 0)
+        ]
+        Element.none
 
 
 button : msg -> String -> Element msg
@@ -513,7 +625,6 @@ levelView : Model -> Element Msg
 levelView model =
     Element.el
         [ Element.width Element.fill
-        , Element.height Element.fill
         , Html.Events.Extra.Pointer.onMove PointerMoved |> Element.htmlAttribute
         , Html.Events.Extra.Pointer.onDown PointerDown |> Element.htmlAttribute
         , Html.Events.Extra.Pointer.onUp PointerUp |> Element.htmlAttribute

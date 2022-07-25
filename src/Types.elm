@@ -1,5 +1,6 @@
 module Types exposing (..)
 
+import AssocList exposing (Dict)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Editor
@@ -38,7 +39,8 @@ type alias LoadingFailed_ =
 
 
 type alias BackendModel =
-    {}
+    { savedLevels : Dict Int Editor.Level
+    }
 
 
 type FrontendMsg
