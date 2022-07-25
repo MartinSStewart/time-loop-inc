@@ -14,6 +14,7 @@ module Game exposing
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Dict as RegularDict
+import Effect.Time
 import Element exposing (Element)
 import Element.Background
 import Element.Border
@@ -28,7 +29,6 @@ import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import Point exposing (Point)
 import StringExtra as String
-import Time
 
 
 type alias Game =

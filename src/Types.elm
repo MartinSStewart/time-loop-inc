@@ -1,12 +1,13 @@
 module Types exposing (..)
 
 import AssocList exposing (Dict)
-import Browser exposing (UrlRequest)
-import Browser.Navigation exposing (Key)
-import Editor
+import Browser
+import Editor exposing (LevelId)
+import Effect.Browser.Navigation exposing (Key)
+import Effect.Time
 import Game exposing (Game)
+import Id exposing (Id)
 import Keyboard
-import Time
 import Url exposing (Url)
 
 
@@ -17,15 +18,19 @@ type FrontendModel
 
 
 type alias Loading_ =
-    { navigationKey : Key, time : Maybe Time.Posix }
+    { navigationKey : Effect.Browser.Navigation.Key
+    , time : Maybe Effect.Time.Posix
+    , levelLoading : Maybe { levelId : Id LevelId, level : Maybe Editor.Level }
+    }
 
 
 type alias Loaded_ =
-    { navigationKey : Key
+    { navigationKey : Effect.Browser.Navigation.Key
     , page : Page
     , keys : List Keyboard.Key
     , previousKeys : List Keyboard.Key
-    , time : Time.Posix
+    , time : Effect.Time.Posix
+    , failedToLoadLevel : Bool
     }
 
 
@@ -39,22 +44,24 @@ type alias LoadingFailed_ =
 
 
 type alias BackendModel =
-    { savedLevels : Dict Int Editor.Level
+    { savedLevels : Dict (Id LevelId) Editor.Level
     }
 
 
 type FrontendMsg
-    = UrlClicked UrlRequest
+    = UrlClicked Browser.UrlRequest
     | UrlChanged Url
     | KeyMsg Keyboard.Msg
     | GameMsg Game.Msg
     | EditorMsg Editor.Msg
-    | AnimationFrame Time.Posix
+    | AnimationFrame Effect.Time.Posix
     | PressedGotoEditor
 
 
 type ToBackend
     = NoOpToBackend
+    | EditorToBackend Editor.ToBackend
+    | LoadLevelRequest (Id LevelId)
 
 
 type BackendMsg
@@ -63,3 +70,5 @@ type BackendMsg
 
 type ToFrontend
     = NoOpToFrontend
+    | EditorToFrontend Editor.ToFrontend
+    | LoadLevelResponse (Id LevelId) (Maybe Editor.Level)

@@ -1,15 +1,20 @@
-module Editor exposing (Level, Model, Msg, animationFrame, init, keyUpdate, update, view)
+module Editor exposing (Level, LevelId, Model, Msg, ToBackend(..), ToFrontend(..), animationFrame, init, initWithLevel, keyUpdate, update, updateFromBackend, view)
 
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
+import Effect.Browser.Navigation
+import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Lamdera as Lamdera
 import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Env
 import Game exposing (Game)
 import Html.Attributes
 import Html.Events.Extra.Pointer
+import Id exposing (Id)
 import KeyHelper
 import Keyboard exposing (Key)
 import Level exposing (Door, Exit, Laser, Portal, PortalPair, TileEdge(..), WallType(..))
@@ -49,7 +54,11 @@ type ToBackend
 
 
 type ToFrontend
-    = SaveLevelResponse Int
+    = SaveLevelResponse (Id LevelId)
+
+
+type LevelId
+    = LevelId Never
 
 
 type alias Model =
@@ -57,6 +66,7 @@ type alias Model =
     , pointerPosition : Maybe ( Float, Float )
     , pointerIsDown : Bool
     , level : Level
+    , levelId : Maybe (Id LevelId)
     , undoHistory : List Level
     , redoHistory : List Level
     , game : StartGame
@@ -86,6 +96,20 @@ init =
     , pointerPosition = Nothing
     , pointerIsDown = False
     , level = defaultLevel
+    , levelId = Nothing
+    , undoHistory = []
+    , redoHistory = []
+    , game = NotStarted { pressedStart = False }
+    }
+
+
+initWithLevel : Id LevelId -> Level -> Model
+initWithLevel levelId level =
+    { tool = WallTool
+    , pointerPosition = Nothing
+    , pointerIsDown = False
+    , level = level
+    , levelId = Just levelId
     , undoHistory = []
     , redoHistory = []
     , game = NotStarted { pressedStart = False }
@@ -105,14 +129,14 @@ defaultLevel =
     }
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+update : Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 update msg model =
     case msg of
         PressedSelectTool tool ->
-            ( { model | tool = tool }, Cmd.none )
+            ( { model | tool = tool }, Command.none )
 
         PressedReset ->
-            ( { model | level = defaultLevel }, Cmd.none )
+            ( { model | level = defaultLevel }, Command.none )
 
         PointerMoved event ->
             let
@@ -128,7 +152,7 @@ update msg model =
                         model.level
                 , pointerPosition = Just event.pointer.offsetPos
               }
-            , Cmd.none
+            , Command.none
             )
 
         PointerDown event ->
@@ -150,11 +174,11 @@ update msg model =
 
               else
                 model2
-            , Cmd.none
+            , Command.none
             )
 
         PointerUp event ->
-            ( { model | pointerPosition = Just event.pointer.offsetPos, pointerIsDown = False }, Cmd.none )
+            ( { model | pointerPosition = Just event.pointer.offsetPos, pointerIsDown = False }, Command.none )
 
         PressedPlay ->
             ( case validateLevel model.level of
@@ -163,7 +187,7 @@ update msg model =
 
                 Err _ ->
                     { model | game = NotStarted { pressedStart = True } }
-            , Cmd.none
+            , Command.none
             )
 
         GameMsg gameMsg ->
@@ -173,11 +197,11 @@ update msg model =
 
                 NotStarted _ ->
                     model
-            , Cmd.none
+            , Command.none
             )
 
         PressedBackToEditor ->
-            ( { model | game = NotStarted { pressedStart = False } }, Cmd.none )
+            ( { model | game = NotStarted { pressedStart = False } }, Command.none )
 
         TypedTimeDelta { portalPairIndex, timeDelta } ->
             let
@@ -193,11 +217,23 @@ update msg model =
                             level.portalPairs
                 }
                 model
-            , Cmd.none
+            , Command.none
             )
 
         PressedSave ->
-            ( model, Cmd.none )
+            ( model, Lamdera.sendToBackend (SaveLevelRequest model.level) )
+
+
+updateFromBackend : Effect.Browser.Navigation.Key -> ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+updateFromBackend navigationKey msg model =
+    case msg of
+        SaveLevelResponse id ->
+            ( model, Effect.Browser.Navigation.replaceUrl navigationKey (levelUrl id) )
+
+
+levelUrl : Id LevelId -> String
+levelUrl levelId =
+    "/level/" ++ Id.toString levelId
 
 
 validateLevel : Level -> Result String Level.Level
@@ -495,9 +531,37 @@ view model =
         NotStarted { pressedStart } ->
             Element.column
                 [ Element.width Element.fill, Element.height Element.fill ]
-                [ toolbarView pressedStart model
-                , levelView model
-                , portalPairsView model
+                [ Element.row
+                    [ Element.spacing 8
+                    , Element.padding 4
+                    , Element.Background.color (Element.rgb 0.9 0.9 0.9)
+                    , Element.width Element.fill
+                    ]
+                    [ button PressedPlay "Play"
+                    , case ( pressedStart, validateLevel model.level ) of
+                        ( True, Err error ) ->
+                            Element.el [ Element.Font.color (Element.rgb 1 0 0) ] (Element.text error)
+
+                        _ ->
+                            Element.none
+                    , verticalLine
+                    , button PressedSave "Save"
+                    , case model.levelId of
+                        Just levelId ->
+                            "Saved to " ++ Env.domain ++ levelUrl levelId |> Element.text
+
+                        Nothing ->
+                            Element.none
+                    ]
+                , Element.row
+                    [ Element.width Element.fill, Element.height Element.fill ]
+                    [ toolbarView model
+                    , Element.column
+                        [ Element.alignTop ]
+                        [ levelView model
+                        , portalPairsView model
+                        ]
+                    ]
                 ]
 
 
@@ -535,8 +599,8 @@ portalPairsView model =
             |> Element.column [ Element.padding 8, Element.spacing 4 ]
 
 
-toolbarView : Bool -> Model -> Element Msg
-toolbarView pressedStart model =
+toolbarView : Model -> Element Msg
+toolbarView model =
     let
         toolButton : Tool -> String -> Element Msg
         toolButton select label =
@@ -550,16 +614,18 @@ toolbarView pressedStart model =
                     )
                 , Element.Border.width 1
                 , Element.padding 4
+                , Element.width Element.fill
                 ]
                 { onPress = Just (PressedSelectTool select)
-                , label = Element.text label
+                , label = Element.el [ Element.centerX ] (Element.text label)
                 }
     in
-    Element.row
+    Element.column
         [ Element.spacing 8
         , Element.padding 4
         , Element.Background.color (Element.rgb 0.9 0.9 0.9)
-        , Element.width Element.fill
+        , Element.height Element.fill
+        , Element.alignTop
         ]
         [ toolButton WallTool "Wall"
         , toolButton GlassTool "Glass"
@@ -570,16 +636,6 @@ toolbarView pressedStart model =
         , toolButton (DoorTool Nothing) "Door"
         , toolButton EraseTool "Erase"
         , toolButton ExitTool "Place exit"
-        , verticalLine
-        , button PressedPlay "Play"
-        , case ( pressedStart, validateLevel model.level ) of
-            ( True, Err error ) ->
-                Element.el [ Element.Font.color (Element.rgb 1 0 0) ] (Element.text error)
-
-            _ ->
-                Element.none
-        , verticalLine
-        , button PressedSave "Save"
         ]
 
 
@@ -723,6 +779,25 @@ viewLevel level =
 
                                         Nothing ->
                                             Nothing
+
+                                timePortalText =
+                                    List.map
+                                        (\( timeDelta, _ ) ->
+                                            (if timeDelta < 0 then
+                                                "t" ++ String.fromInt timeDelta
+
+                                             else
+                                                "t+" ++ String.fromInt timeDelta
+                                            )
+                                                |> Element.text
+                                                |> Element.el
+                                                    [ Element.Font.size 12
+                                                    , Element.centerX
+                                                    , Element.centerY
+                                                    ]
+                                                |> Element.inFront
+                                        )
+                                        localPortals
                             in
                             Element.el
                                 (Element.width (Element.px tileSize)
@@ -753,6 +828,7 @@ viewLevel level =
                                     :: drawWallsAndDoorBackground position maybeDoor walls
                                     :: drawLaser position level.lasers
                                     ++ drawLaserBeam position laserBeams
+                                    ++ timePortalText
                                 )
                                 (if Set.member position level.boxesStart then
                                     Element.el

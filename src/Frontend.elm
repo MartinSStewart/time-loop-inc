@@ -3,21 +3,27 @@ module Frontend exposing (..)
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
 import Browser
-import Browser.Events
-import Browser.Navigation
 import Editor
+import Effect.Browser.Events
+import Effect.Browser.Navigation
+import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Lamdera
+import Effect.Subscription as Subscription exposing (Subscription)
 import Element exposing (Element)
 import Game
+import Id exposing (Id)
 import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
 import List.Nonempty exposing (Nonempty(..))
 import Types exposing (..)
 import Url exposing (Url)
+import Url.Parser exposing ((</>), (<?>))
 
 
 app =
-    Lamdera.frontend
+    Effect.Lamdera.frontend
+        Lamdera.sendToBackend
         { init = init
         , onUrlRequest = UrlClicked
         , onUrlChange = UrlChanged
@@ -233,10 +239,25 @@ level2 =
         }
 
 
-init : Url -> Browser.Navigation.Key -> ( FrontendModel, Cmd FrontendMsg )
-init _ navigationKey =
-    ( Loading { navigationKey = navigationKey, time = Nothing }
-    , Cmd.none
+init : Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+init url navigationKey =
+    let
+        urlParser =
+            Url.Parser.oneOf
+                [ Url.Parser.top |> Url.Parser.map Nothing
+                , Url.Parser.s "level" </> Url.Parser.int |> Url.Parser.map (Id.fromInt >> Just)
+                ]
+    in
+    ( Loading { navigationKey = navigationKey, time = Nothing, levelLoading = Nothing }
+    , case Url.Parser.parse urlParser url of
+        Nothing ->
+            Command.none
+
+        Just Nothing ->
+            Command.none
+
+        Just (Just levelId) ->
+            Effect.Lamdera.sendToBackend (LoadLevelRequest levelId)
     )
 
 
@@ -249,7 +270,16 @@ initLoaded loading =
             , time = time
             , keys = []
             , previousKeys = []
+            , failedToLoadLevel = False
             }
+                |> (\model ->
+                        case loading.levelLoading of
+                            Just { levelId, level } ->
+                                loadLevel levelId level model
+
+                            Nothing ->
+                                model
+                   )
                 |> Loaded
 
         ( Just _, _ ) ->
@@ -263,25 +293,25 @@ initLoaded loading =
 ---- UPDATE ----
 
 
-update : FrontendMsg -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 update msg model =
     case model of
         Loading loading ->
             case msg of
                 AnimationFrame time ->
-                    ( initLoaded { loading | time = Just time }, Cmd.none )
+                    ( initLoaded { loading | time = Just time }, Command.none )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( model, Command.none )
 
         Loaded loaded ->
             updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
         LoadingFailed loadingFailed ->
-            ( LoadingFailed loadingFailed, Cmd.none )
+            ( LoadingFailed loadingFailed, Command.none )
 
 
-updateLoaded : FrontendMsg -> Loaded_ -> ( Loaded_, Cmd FrontendMsg )
+updateLoaded : FrontendMsg -> Loaded_ -> ( Loaded_, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
     case msg of
         KeyMsg keyMsg ->
@@ -298,21 +328,21 @@ updateLoaded msg model =
 
                 EditorPage editor ->
                     { newModel | page = Editor.keyUpdate newModel editor |> EditorPage }
-            , Cmd.none
+            , Command.none
             )
 
         UrlClicked urlRequest ->
             ( model
             , case urlRequest of
                 Browser.Internal url ->
-                    Browser.Navigation.pushUrl model.navigationKey (Url.toString url)
+                    Effect.Browser.Navigation.pushUrl model.navigationKey (Url.toString url)
 
                 Browser.External url ->
-                    Browser.Navigation.load url
+                    Effect.Browser.Navigation.load url
             )
 
         UrlChanged url ->
-            ( model, Cmd.none )
+            ( model, Command.none )
 
         GameMsg gameMsg ->
             ( case model.page of
@@ -321,18 +351,19 @@ updateLoaded msg model =
 
                 _ ->
                     model
-            , Cmd.none
+            , Command.none
             )
 
         EditorMsg editorMsg ->
-            ( case model.page of
+            case model.page of
                 EditorPage editor ->
-                    { model | page = Editor.update editorMsg editor |> EditorPage }
+                    Editor.update editorMsg editor
+                        |> Tuple.mapBoth
+                            (\newEditor -> { model | page = EditorPage newEditor })
+                            (\cmd -> Command.map EditorToBackend EditorMsg cmd)
 
                 _ ->
-                    model
-            , Cmd.none
-            )
+                    ( model, Command.none )
 
         AnimationFrame _ ->
             ( case model.page of
@@ -341,20 +372,65 @@ updateLoaded msg model =
 
                 EditorPage editor ->
                     { model | page = Editor.animationFrame editor |> EditorPage }
-            , Cmd.none
+            , Command.none
             )
 
         PressedGotoEditor ->
             ( { model | page = Editor.init |> EditorPage }
-            , Cmd.none
+            , Command.none
             )
 
 
-updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 updateFromBackend msg model =
+    case model of
+        Loaded loaded ->
+            updateFromBackendLoaded msg loaded
+                |> Tuple.mapFirst Loaded
+
+        Loading loading ->
+            case msg of
+                LoadLevelResponse levelId maybeLevel ->
+                    ( { loading | levelLoading = Just { levelId = levelId, level = maybeLevel } } |> Loading
+                    , Command.none
+                    )
+
+                _ ->
+                    ( model, Command.none )
+
+        LoadingFailed _ ->
+            ( model, Command.none )
+
+
+updateFromBackendLoaded : ToFrontend -> Loaded_ -> ( Loaded_, Command FrontendOnly ToBackend FrontendMsg )
+updateFromBackendLoaded msg model =
     case msg of
         NoOpToFrontend ->
-            ( model, Cmd.none )
+            ( model, Command.none )
+
+        EditorToFrontend toFrontend ->
+            case model.page of
+                EditorPage editor ->
+                    Editor.updateFromBackend model.navigationKey toFrontend editor
+                        |> Tuple.mapBoth
+                            (\newEditor -> { model | page = EditorPage newEditor })
+                            (\cmd -> Command.map EditorToBackend EditorMsg cmd)
+
+                GamePage game ->
+                    ( model, Command.none )
+
+        LoadLevelResponse levelId maybeLevel ->
+            ( loadLevel levelId maybeLevel model, Command.none )
+
+
+loadLevel : Id Editor.LevelId -> Maybe Editor.Level -> Loaded_ -> Loaded_
+loadLevel levelId maybeLevel model =
+    case maybeLevel of
+        Just level ->
+            { model | page = Editor.initWithLevel levelId level |> EditorPage }
+
+        Nothing ->
+            { model | failedToLoadLevel = True }
 
 
 
@@ -394,9 +470,9 @@ view model =
     }
 
 
-subscriptions : FrontendModel -> Sub FrontendMsg
+subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
 subscriptions model =
-    Sub.batch
-        [ Sub.map KeyMsg Keyboard.subscriptions
-        , Browser.Events.onAnimationFrame AnimationFrame
+    Subscription.batch
+        [ Subscription.map KeyMsg Keyboard.subscriptions
+        , Effect.Browser.Events.onAnimationFrame AnimationFrame
         ]
