@@ -6,6 +6,7 @@ import Dict as RegularDict
 import Element exposing (Element)
 import Element.Font
 import Frontend
+import Game
 import Html exposing (Html)
 import Level exposing (Level, TileEdge(..), WallType(..))
 import LevelState exposing (Direction(..), LevelInstant)
@@ -313,7 +314,7 @@ showInstants level dict =
         |> List.sort
         |> List.map
             (\time ->
-                Frontend.viewLevel
+                Game.viewLevel
                     { currentLevel = level
                     , timelineCache = dict
                     , viewTime = toFloat time

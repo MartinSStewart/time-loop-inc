@@ -9,6 +9,7 @@ module Game exposing
     , setMoveActions
     , update
     , view
+    , viewLevel
     )
 
 import AssocList as Dict exposing (Dict)
