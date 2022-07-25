@@ -1,4 +1,18 @@
-module Editor exposing (Level, LevelId, Model, Msg, ToBackend(..), ToFrontend(..), animationFrame, init, initWithLevel, keyUpdate, update, updateFromBackend, view)
+module Editor exposing
+    ( Level
+    , LevelId
+    , Model
+    , Msg
+    , ToBackend(..)
+    , ToFrontend(..)
+    , animationFrame
+    , init
+    , initWithLevel
+    , keyUpdate
+    , update
+    , updateFromBackend
+    , view
+    )
 
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)
@@ -228,7 +242,7 @@ updateFromBackend : Effect.Browser.Navigation.Key -> ToFrontend -> Model -> ( Mo
 updateFromBackend navigationKey msg model =
     case msg of
         SaveLevelResponse id ->
-            ( model, Effect.Browser.Navigation.replaceUrl navigationKey (levelUrl id) )
+            ( { model | levelId = Just id }, Effect.Browser.Navigation.replaceUrl navigationKey (levelUrl id) )
 
 
 levelUrl : Id LevelId -> String
