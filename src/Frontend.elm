@@ -16,6 +16,7 @@ import Keyboard exposing (Key)
 import Lamdera
 import Level exposing (Laser, Level, Portal, TileEdge(..), WallType(..))
 import List.Nonempty exposing (Nonempty(..))
+import Route exposing (LevelId, Route(..))
 import Types exposing (..)
 import Url exposing (Url)
 import Url.Parser exposing ((</>), (<?>))
@@ -241,23 +242,19 @@ level2 =
 
 init : Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 init url navigationKey =
-    let
-        urlParser =
-            Url.Parser.oneOf
-                [ Url.Parser.top |> Url.Parser.map Nothing
-                , Url.Parser.s "level" </> Url.Parser.int |> Url.Parser.map (Id.fromInt >> Just)
-                ]
-    in
     ( Loading { navigationKey = navigationKey, time = Nothing, levelLoading = Nothing }
-    , case Url.Parser.parse urlParser url of
+    , case Url.Parser.parse Route.parser url of
         Nothing ->
             Command.none
 
-        Just Nothing ->
+        Just Homepage ->
             Command.none
 
-        Just (Just levelId) ->
+        Just (LevelRoute levelId) ->
             Effect.Lamdera.sendToBackend (LoadLevelRequest levelId)
+
+        Just (ReplayRoute levelId replayId) ->
+            Effect.Lamdera.sendToBackend (LoadReplayRequest levelId replayId)
     )
 
 
@@ -422,8 +419,18 @@ updateFromBackendLoaded msg model =
         LoadLevelResponse levelId maybeLevel ->
             ( loadLevel levelId maybeLevel model, Command.none )
 
+        LoadReplayResponse levelId replayId maybeLevelAndReplay ->
+            ( case maybeLevelAndReplay of
+                Just { level, replay } ->
+                    { model | page = Editor.initWithReplay levelId replayId level replay |> EditorPage }
 
-loadLevel : Id Editor.LevelId -> Maybe Editor.Level -> Loaded_ -> Loaded_
+                Nothing ->
+                    { model | failedToLoadLevel = True }
+            , Command.none
+            )
+
+
+loadLevel : Id LevelId -> Maybe Editor.Level -> Loaded_ -> Loaded_
 loadLevel levelId maybeLevel model =
     case maybeLevel of
         Just level ->

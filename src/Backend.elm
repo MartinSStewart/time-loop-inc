@@ -1,12 +1,13 @@
 module Backend exposing (..)
 
-import AssocList as Dict
-import Editor exposing (LevelId)
+import AssocList as Dict exposing (Dict)
+import Editor
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Id exposing (Id)
 import Lamdera
+import Route exposing (LevelId, ReplayId)
 import Types exposing (..)
 
 
@@ -48,20 +49,92 @@ updateFromFrontend sessionId clientId msg model =
 
         EditorToBackend (Editor.SaveLevelRequest level) ->
             let
-                newId : Id LevelId
-                newId =
-                    case Dict.keys model.savedLevels |> List.map Id.toInt |> List.maximum of
-                        Just maximum ->
-                            maximum + 1 |> Id.fromInt
-
-                        Nothing ->
-                            Id.fromInt 1000
+                levelId : Id LevelId
+                levelId =
+                    newId 1000 model.savedLevels
             in
-            ( { model | savedLevels = Dict.insert newId level model.savedLevels }
-            , Effect.Lamdera.sendToFrontend clientId (EditorToFrontend (Editor.SaveLevelResponse newId))
+            ( { model | savedLevels = Dict.insert levelId { level = level, replays = Dict.empty } model.savedLevels }
+            , Effect.Lamdera.sendToFrontend clientId (EditorToFrontend (Editor.SaveLevelResponse levelId))
+            )
+
+        EditorToBackend (Editor.SaveReplayRequest levelId replay) ->
+            case Dict.get levelId model.savedLevels of
+                Just level ->
+                    let
+                        replayId =
+                            newId 0 level.replays
+                    in
+                    ( { model
+                        | savedLevels =
+                            Dict.insert
+                                levelId
+                                { level | replays = Dict.insert replayId replay level.replays }
+                                model.savedLevels
+                      }
+                    , EditorToFrontend (Editor.SaveReplayResponse levelId (Ok replayId))
+                        |> Effect.Lamdera.sendToFrontend clientId
+                    )
+
+                Nothing ->
+                    ( model
+                    , EditorToFrontend (Editor.SaveReplayResponse levelId (Err ()))
+                        |> Effect.Lamdera.sendToFrontend clientId
+                    )
+
+        EditorToBackend (Editor.SaveLevelAndReplayRequest level replay) ->
+            let
+                levelId : Id LevelId
+                levelId =
+                    newId 1000 model.savedLevels
+
+                replayId : Id ReplayId
+                replayId =
+                    Id.fromInt 0
+            in
+            ( { model
+                | savedLevels =
+                    Dict.insert
+                        levelId
+                        { level = level, replays = Dict.singleton replayId replay }
+                        model.savedLevels
+              }
+            , EditorToFrontend (Editor.SaveLevelAndReplayResponse levelId replayId)
+                |> Effect.Lamdera.sendToFrontend clientId
             )
 
         LoadLevelRequest id ->
             ( model
-            , Effect.Lamdera.sendToFrontend clientId (LoadLevelResponse id (Dict.get id model.savedLevels))
+            , Effect.Lamdera.sendToFrontend
+                clientId
+                (LoadLevelResponse id (Dict.get id model.savedLevels |> Maybe.map .level))
             )
+
+        LoadReplayRequest levelId replayId ->
+            ( model
+            , LoadReplayResponse
+                levelId
+                replayId
+                (case Dict.get levelId model.savedLevels of
+                    Just savedLevel ->
+                        case Dict.get replayId savedLevel.replays of
+                            Just replay ->
+                                Just { level = savedLevel.level, replay = replay }
+
+                            Nothing ->
+                                Nothing
+
+                    Nothing ->
+                        Nothing
+                )
+                |> Effect.Lamdera.sendToFrontend clientId
+            )
+
+
+newId : Int -> Dict (Id a) b -> Id a
+newId startId dict =
+    case Dict.keys dict |> List.map Id.toInt |> List.maximum of
+        Just maximum ->
+            maximum + 1 |> Id.fromInt
+
+        Nothing ->
+            Id.fromInt startId

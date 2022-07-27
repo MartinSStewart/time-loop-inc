@@ -1,9 +1,11 @@
 module Game exposing
     ( Game
     , Msg
+    , Replay
     , animationFrame
     , button
     , buttonAttributes
+    , getReplay
     , init
     , keyUpdate
     , setMoveActions
@@ -227,6 +229,16 @@ update msg model =
 
         SliderLostFocus ->
             model
+
+
+type alias Replay =
+    { moveActions : List (Maybe Direction)
+    }
+
+
+getReplay : Game -> Replay
+getReplay game =
+    { moveActions = game.moveActions }
 
 
 view : Game -> Element Msg

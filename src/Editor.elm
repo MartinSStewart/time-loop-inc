@@ -1,6 +1,5 @@
 module Editor exposing
     ( Level
-    , LevelId
     , Model
     , Msg
     , ToBackend(..)
@@ -8,6 +7,7 @@ module Editor exposing
     , animationFrame
     , init
     , initWithLevel
+    , initWithReplay
     , keyUpdate
     , update
     , updateFromBackend
@@ -25,17 +25,18 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Env
-import Game exposing (Game)
+import Game exposing (Game, Replay)
 import Html.Attributes
 import Html.Events.Extra.Pointer
 import Id exposing (Id)
 import KeyHelper
 import Keyboard exposing (Key)
 import Level exposing (Door, Exit, Laser, Portal, PortalPair, TileEdge(..), WallType(..))
-import LevelState exposing (LaserBeam)
+import LevelState exposing (Direction, LaserBeam)
 import List.Extra as List
 import List.Nonempty
 import Point exposing (Point)
+import Route exposing (LevelId, ReplayId)
 
 
 type Msg
@@ -48,6 +49,7 @@ type Msg
     | PressedSave
     | GameMsg Game.Msg
     | PressedBackToEditor
+    | PressedSaveRelayAndGoBackToEditor
     | TypedTimeDelta { portalPairIndex : Int, timeDelta : Int }
 
 
@@ -65,31 +67,41 @@ type Tool
 
 type ToBackend
     = SaveLevelRequest Level
+    | SaveReplayRequest (Id LevelId) Replay
+    | SaveLevelAndReplayRequest Level Replay
 
 
 type ToFrontend
     = SaveLevelResponse (Id LevelId)
-
-
-type LevelId
-    = LevelId Never
+    | SaveReplayResponse (Id LevelId) (Result () (Id ReplayId))
+    | SaveLevelAndReplayResponse (Id LevelId) (Id ReplayId)
 
 
 type alias Model =
     { tool : Tool
     , pointerPosition : Maybe ( Float, Float )
     , pointerIsDown : Bool
-    , level : Level
-    , levelId : Maybe (Id LevelId)
-    , undoHistory : List Level
-    , redoHistory : List Level
+    , level : LevelAndId
+    , undoHistory : List LevelAndId
+    , redoHistory : List LevelAndId
     , game : StartGame
+    , isSaving : Bool
     }
+
+
+type alias LevelAndId =
+    { saveStatus : SaveStatus, level : Level }
+
+
+type SaveStatus
+    = NotSaved
+    | LevelSaved (Id LevelId)
+    | ReplaySaved (Id LevelId) (Id ReplayId)
 
 
 type StartGame
     = NotStarted { pressedStart : Bool }
-    | Started Game
+    | Started { game : Game, replay : Maybe Replay }
 
 
 type alias Level =
@@ -109,24 +121,33 @@ init =
     { tool = WallTool
     , pointerPosition = Nothing
     , pointerIsDown = False
-    , level = defaultLevel
-    , levelId = Nothing
+    , level = { saveStatus = NotSaved, level = defaultLevel }
     , undoHistory = []
     , redoHistory = []
     , game = NotStarted { pressedStart = False }
+    , isSaving = False
     }
 
 
 initWithLevel : Id LevelId -> Level -> Model
 initWithLevel levelId level =
-    { tool = WallTool
-    , pointerPosition = Nothing
-    , pointerIsDown = False
-    , level = level
-    , levelId = Just levelId
-    , undoHistory = []
-    , redoHistory = []
-    , game = NotStarted { pressedStart = False }
+    { init | level = { saveStatus = LevelSaved levelId, level = level } }
+
+
+initWithReplay : Id LevelId -> Id ReplayId -> Level -> Replay -> Model
+initWithReplay levelId replayId level replay =
+    { init
+        | level = { saveStatus = ReplaySaved levelId replayId, level = level }
+        , game =
+            case validateLevel level of
+                Ok ok ->
+                    { game = Game.init (List.Nonempty.fromElement ok) |> Game.setMoveActions replay.moveActions
+                    , replay = Just replay
+                    }
+                        |> Started
+
+                Err _ ->
+                    NotStarted { pressedStart = True }
     }
 
 
@@ -150,22 +171,23 @@ update msg model =
             ( { model | tool = tool }, Command.none )
 
         PressedReset ->
-            ( { model | level = defaultLevel }, Command.none )
+            ( addUndoStep defaultLevel model, Command.none )
 
         PointerMoved event ->
             let
                 gridPosition =
                     pointToGrid event.pointer.offsetPos
-            in
-            ( { model
-                | level =
-                    if model.pointerIsDown && insideLevel gridPosition model.level then
-                        handlePointerMove gridPosition model.tool model.level
 
-                    else
-                        model.level
-                , pointerPosition = Just event.pointer.offsetPos
-              }
+                model2 =
+                    { model | pointerPosition = Just event.pointer.offsetPos }
+            in
+            ( if model2.pointerIsDown && insideLevel gridPosition model2.level.level then
+                addUndoStep
+                    (handlePointerMove gridPosition model2.tool model2.level.level)
+                    model2
+
+              else
+                model2
             , Command.none
             )
 
@@ -181,9 +203,9 @@ update msg model =
                     pointToGrid event.pointer.offsetPos
 
                 ( tool, level ) =
-                    handlePointerDown event.pointer.offsetPos model2 model2.level
+                    handlePointerDown event.pointer.offsetPos model2 model2.level.level
             in
-            ( if insideLevel gridPosition model2.level then
+            ( if insideLevel gridPosition model2.level.level then
                 addUndoStep level { model2 | tool = tool }
 
               else
@@ -195,9 +217,11 @@ update msg model =
             ( { model | pointerPosition = Just event.pointer.offsetPos, pointerIsDown = False }, Command.none )
 
         PressedPlay ->
-            ( case validateLevel model.level of
+            ( case validateLevel model.level.level of
                 Ok ok ->
-                    { model | game = Game.init (List.Nonempty.fromElement ok) |> Started }
+                    { model
+                        | game = { game = Game.init (List.Nonempty.fromElement ok), replay = Nothing } |> Started
+                    }
 
                 Err _ ->
                     { model | game = NotStarted { pressedStart = True } }
@@ -207,7 +231,7 @@ update msg model =
         GameMsg gameMsg ->
             ( case model.game of
                 Started game ->
-                    { model | game = Game.update gameMsg game |> Started }
+                    { model | game = { game | game = Game.update gameMsg game.game } |> Started }
 
                 NotStarted _ ->
                     model
@@ -215,12 +239,50 @@ update msg model =
             )
 
         PressedBackToEditor ->
-            ( { model | game = NotStarted { pressedStart = False } }, Command.none )
+            let
+                level =
+                    model.level
+            in
+            ( { model
+                | game = NotStarted { pressedStart = False }
+                , level = { level | saveStatus = NotSaved }
+              }
+            , Command.none
+            )
+
+        PressedSaveRelayAndGoBackToEditor ->
+            case model.game of
+                Started game ->
+                    let
+                        replay : Replay
+                        replay =
+                            Game.getReplay game.game
+                    in
+                    if game.replay == Just replay then
+                        ( model, Command.none )
+
+                    else
+                        ( { model | game = NotStarted { pressedStart = False }, isSaving = True }
+                        , (case model.level.saveStatus of
+                            NotSaved ->
+                                SaveLevelAndReplayRequest model.level.level replay
+
+                            LevelSaved levelId ->
+                                SaveReplayRequest levelId replay
+
+                            ReplaySaved levelId _ ->
+                                SaveReplayRequest levelId replay
+                          )
+                            |> Lamdera.sendToBackend
+                        )
+
+                NotStarted _ ->
+                    ( model, Command.none )
 
         TypedTimeDelta { portalPairIndex, timeDelta } ->
             let
                 level =
-                    model.level
+                    model.level.level
             in
             ( addUndoStep
                 { level
@@ -235,19 +297,57 @@ update msg model =
             )
 
         PressedSave ->
-            ( model, Lamdera.sendToBackend (SaveLevelRequest model.level) )
+            if model.isSaving then
+                ( model, Command.none )
+
+            else
+                ( { model | isSaving = True }, Lamdera.sendToBackend (SaveLevelRequest model.level.level) )
 
 
 updateFromBackend : Effect.Browser.Navigation.Key -> ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 updateFromBackend navigationKey msg model =
     case msg of
-        SaveLevelResponse id ->
-            ( { model | levelId = Just id }, Effect.Browser.Navigation.replaceUrl navigationKey (levelUrl id) )
+        SaveLevelResponse levelId ->
+            let
+                level =
+                    model.level
+            in
+            ( { model | level = { level | saveStatus = LevelSaved levelId }, isSaving = False }
+            , Effect.Browser.Navigation.replaceUrl navigationKey (levelUrl levelId)
+            )
+
+        SaveReplayResponse levelId maybeReplayId ->
+            let
+                level =
+                    model.level
+            in
+            case maybeReplayId of
+                Ok replayId ->
+                    ( { model | level = { level | saveStatus = ReplaySaved levelId replayId }, isSaving = False }
+                    , Command.none
+                    )
+
+                Err () ->
+                    ( model, Command.none )
+
+        SaveLevelAndReplayResponse levelId replayId ->
+            let
+                level =
+                    model.level
+            in
+            ( { model | level = { level | saveStatus = ReplaySaved levelId replayId }, isSaving = False }
+            , Effect.Browser.Navigation.replaceUrl navigationKey (levelUrl levelId)
+            )
 
 
 levelUrl : Id LevelId -> String
 levelUrl levelId =
     "/level/" ++ Id.toString levelId
+
+
+replayUrl : Id LevelId -> Id ReplayId -> String
+replayUrl levelId replayId =
+    "/level/" ++ Id.toString levelId ++ "/" ++ Id.toString replayId
 
 
 validateLevel : Level -> Result String Level.Level
@@ -284,8 +384,12 @@ validateLevel level =
 
 addUndoStep : Level -> Model -> Model
 addUndoStep level model =
+    let
+        levelData =
+            model.level
+    in
     { model
-        | level = level
+        | level = { levelData | level = level }
         , undoHistory = model.level :: model.undoHistory
         , redoHistory = []
     }
@@ -295,7 +399,7 @@ keyUpdate : { a | keys : List Key, previousKeys : List Key } -> Model -> Model
 keyUpdate keyState model =
     case model.game of
         Started game ->
-            { model | game = Game.keyUpdate keyState game |> Started }
+            { model | game = { game | game = Game.keyUpdate keyState game.game } |> Started }
 
         NotStarted _ ->
             if KeyHelper.undo keyState then
@@ -322,7 +426,7 @@ animationFrame : Model -> Model
 animationFrame model =
     case model.game of
         Started game ->
-            { model | game = Game.animationFrame game |> Started }
+            { model | game = { game | game = Game.animationFrame game.game } |> Started }
 
         NotStarted _ ->
             model
@@ -538,8 +642,16 @@ view model =
         Started game ->
             Element.column
                 []
-                [ Game.view game |> Element.map GameMsg
-                , button PressedBackToEditor "Back to editor"
+                [ Game.view game.game |> Element.map GameMsg
+                , Element.row
+                    [ Element.spacing 16 ]
+                    [ button PressedBackToEditor "Back to editor"
+                    , if Just (Game.getReplay game.game) == game.replay then
+                        Element.none
+
+                      else
+                        button PressedSaveRelayAndGoBackToEditor "Save replay and go back to editor"
+                    ]
                 ]
 
         NotStarted { pressedStart } ->
@@ -552,19 +664,28 @@ view model =
                     , Element.width Element.fill
                     ]
                     [ button PressedPlay "Play"
-                    , case ( pressedStart, validateLevel model.level ) of
+                    , case ( pressedStart, validateLevel model.level.level ) of
                         ( True, Err error ) ->
                             Element.el [ Element.Font.color (Element.rgb 1 0 0) ] (Element.text error)
 
                         _ ->
                             Element.none
                     , verticalLine
-                    , button PressedSave "Save"
-                    , case model.levelId of
-                        Just levelId ->
+                    , button PressedSave
+                        (if model.isSaving then
+                            "Saving..."
+
+                         else
+                            "Save"
+                        )
+                    , case model.level.saveStatus of
+                        LevelSaved levelId ->
                             "Saved to " ++ Env.domain ++ levelUrl levelId |> Element.text
 
-                        Nothing ->
+                        ReplaySaved levelId replayId ->
+                            "Replay saved to " ++ Env.domain ++ replayUrl levelId replayId |> Element.text
+
+                        NotSaved ->
                             Element.none
                     ]
                 , Element.row
@@ -581,7 +702,7 @@ view model =
 
 portalPairsView : Model -> Element Msg
 portalPairsView model =
-    if List.isEmpty model.level.portalPairs then
+    if List.isEmpty model.level.level.portalPairs then
         Element.none
 
     else
@@ -609,7 +730,7 @@ portalPairsView model =
                         , placeholder = Nothing
                         }
                 )
-                model.level.portalPairs
+                model.level.level.portalPairs
             |> Element.column [ Element.padding 8, Element.spacing 4 ]
 
 
@@ -699,7 +820,7 @@ levelView model =
         , Html.Events.Extra.Pointer.onDown PointerDown |> Element.htmlAttribute
         , Html.Events.Extra.Pointer.onUp PointerUp |> Element.htmlAttribute
         ]
-        (viewLevel model.level)
+        (viewLevel model.level.level)
 
 
 tileSize : number

@@ -2,12 +2,13 @@ module Types exposing (..)
 
 import AssocList exposing (Dict)
 import Browser
-import Editor exposing (LevelId)
+import Editor
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Time
-import Game exposing (Game)
+import Game exposing (Game, Replay)
 import Id exposing (Id)
 import Keyboard
+import Route exposing (LevelId, ReplayId)
 import Url exposing (Url)
 
 
@@ -44,7 +45,7 @@ type alias LoadingFailed_ =
 
 
 type alias BackendModel =
-    { savedLevels : Dict (Id LevelId) Editor.Level
+    { savedLevels : Dict (Id LevelId) { level : Editor.Level, replays : Dict (Id ReplayId) Replay }
     }
 
 
@@ -62,6 +63,7 @@ type ToBackend
     = NoOpToBackend
     | EditorToBackend Editor.ToBackend
     | LoadLevelRequest (Id LevelId)
+    | LoadReplayRequest (Id LevelId) (Id ReplayId)
 
 
 type BackendMsg
@@ -72,3 +74,4 @@ type ToFrontend
     = NoOpToFrontend
     | EditorToFrontend Editor.ToFrontend
     | LoadLevelResponse (Id LevelId) (Maybe Editor.Level)
+    | LoadReplayResponse (Id LevelId) (Id ReplayId) (Maybe { level : Editor.Level, replay : Replay })
