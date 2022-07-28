@@ -1,4 +1,25 @@
-module Level exposing (Door, Exit, Laser, Level, Portal, PortalPair, TileEdge(..), WallType(..), blocksLasers, blocksMovement, boxesStart, doors, exit, getWalls, init, lasers, levelSize, playerStart, portalPairs, unsafe)
+module Level exposing
+    ( Door
+    , Exit
+    , Laser
+    , Level
+    , Portal
+    , PortalPair
+    , TileEdge(..)
+    , WallType(..)
+    , blocksLasers
+    , blocksMovement
+    , boxesStart
+    , doors
+    , exit
+    , getWalls
+    , init
+    , lasers
+    , levelSize
+    , playerStart
+    , portalPairs
+    , unsafe
+    )
 
 import AssocList as Dict exposing (Dict)
 import AssocSet as Set exposing (Set)

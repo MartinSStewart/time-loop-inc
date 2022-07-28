@@ -1,4 +1,4 @@
-module Id exposing (Id, fromInt, toInt, toString)
+module Id exposing (Id(..), fromInt, toInt, toString)
 
 
 type Id a
